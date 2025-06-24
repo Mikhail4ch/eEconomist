@@ -1,6 +1,7 @@
 import telebot
 from telebot import types
 from TOP import TOP5
+from Bitz import BITZ
 
 bot = telebot.TeleBot('7968913931:AAFrFTAOgxaiN4MoMOPhHJmk3o5qAnsgYNc')
 
@@ -8,6 +9,7 @@ bot = telebot.TeleBot('7968913931:AAFrFTAOgxaiN4MoMOPhHJmk3o5qAnsgYNc')
 USER_MSG_IDS = {}         # For context (yields, etc.)
 PERMANENT_MSG_IDS = {}    # For all "permanent" UI messages
 MENU_IMAGE_ID = {}        # Last sent menu image (book.png) per user
+EARNING_STATE = set()
 
 # NEW: For sticky/menu messages sent from sticky button!
 STICKY_MSG_ID = {}
@@ -46,6 +48,8 @@ def delete_user_msgs(chat_id, user_id):
 def start(message):
     user_id = message.from_user.id
     chat_id = message.chat.id
+
+    EARNING_STATE.discard(user_id)
 
     # Welcome image and greeting
     file = open('./Eclipse Economy.jpeg', 'rb')
@@ -94,9 +98,9 @@ def menu_entry_point(call):
     # 2. Send menu message with keyboard
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton('Highest Yield 🏆 in the last 24H 🕔 (🔐)', callback_data='yield'))
+    markup.add(types.InlineKeyboardButton('$BITZ stacking performance 🥩 (🔐)', callback_data='bitz'))
     markup.add(types.InlineKeyboardButton('Retroactive points 🪂 (🔐)', callback_data='points'))
     markup.add(types.InlineKeyboardButton('Cross-chain opportunities 🤞⛓️ (🔐)', callback_data='crosschain'))
-    markup.add(types.InlineKeyboardButton('Live $BITZ stacking APR% 📢 (🔒)', callback_data='other_chapters'))
     markup.add(types.InlineKeyboardButton('GameFi 🎮 & 💰(🔒)', callback_data='other_chapters'))
     menu_msg = bot.send_message(
         chat_id,
@@ -136,7 +140,7 @@ def menu_from_sticky(message):
 
 # ---- Menu Handlers for yield/other_chapters ----
 
-@bot.callback_query_handler(func=lambda call: call.data in ['yield', 'points', 'crosschain','other_chapters'])
+@bot.callback_query_handler(func=lambda call: call.data in ['yield', 'points', 'crosschain','other_chapters','bitz'])
 def handle_menu(call):
     if call.data == 'yield':
         markup = types.InlineKeyboardMarkup()
@@ -160,13 +164,61 @@ def handle_menu(call):
         markup.add(types.InlineKeyboardButton('More to come 🔜',callback_data='disabled'))
         msg = bot.send_message(call.message.chat.id,"<b>Retroactive</b> cross-chain interactions like 🌉 between Eclipse and other block⛓️s", parse_mode='html', reply_markup=markup)
         track_user_msg(call.from_user.id, msg.message_id)
+    elif call.data == 'bitz':
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton('Data about staking APR％', callback_data='stacking'))
+        markup.add(types.InlineKeyboardButton('Check how much you will earn 🫰', callback_data='earning'))
+        msg = bot.send_message(call.message.chat.id,"Let's look at incredible <b>$BITZ</b> upside 🔋", parse_mode='html', reply_markup=markup)
+        track_user_msg(call.from_user.id, msg.message_id)
     else:
         msg = bot.send_message(call.message.chat.id, "Coming tho0on!")
         track_user_msg(call.from_user.id, msg.message_id)
     
 @bot.callback_query_handler(func=lambda call: call.data == 'disabled')
 def disabled_callback(call):
-    bot.answer_callback_query(call.id, "Coming soon! 🚧", show_alert=False)
+    bot.answer_callback_query(call.id, "Coming soon 🚧", show_alert=False)
+
+@bot.callback_query_handler(func=lambda call: call.data in ['stacking', 'earning'])
+def handle_bitz(call):
+    if call.data == 'stacking':
+        bitz = BITZ()
+        dataBout24H = bitz.findOutApr()
+        dataAnnual = bitz.annualAPR()
+        msg = bot.send_message(
+            call.message.chat.id,
+            f'Current $BITZ 24H APR:\n\n✅{dataBout24H}\nCurrent $BITZ annual APR:\n✅{dataAnnual}',
+            parse_mode='html',
+        )
+        track_user_msg(call.from_user.id, msg.message_id)
+    elif call.data == 'earning':
+        EARNING_STATE.add(call.from_user.id)
+        msg = bot.send_message(call.message.chat.id, 'Enter the number of $BITZ you want to stake, fam: ')
+        track_user_msg(call.from_user.id, msg.message_id)
+
+@bot.message_handler(func=lambda m: m.from_user.id in EARNING_STATE)
+def get_potentialEarnings(message):
+    user_id = message.from_user.id
+    # NEW: Track the user's own message ID so it gets cleaned up!
+    track_user_msg(user_id, message.message_id)
+    try:
+        staked = float(message.text.strip())
+        if staked < 0:
+            raise ValueError
+    except Exception:
+        msg = bot.send_message(message.chat.id, "❌ Enter a valid positive number for $BITZ amount.")
+        track_user_msg(user_id, msg.message_id)
+        return
+    bitz = BITZ()
+    forDay = bitz.howMuchEarnDaily(staked)
+    forWeek = bitz.howMuchEarnWeekly(staked)
+    forMonth = bitz.howMuchEarnMonthly(staked)
+    forYear = bitz.howMuchYearly(staked)
+    msg = bot.send_message(
+        message.chat.id,
+        f'Lets see fam how much $BITZ you will earn 👀\n\n💹{forDay}\n💹{forWeek}\n💹{forMonth}\n💹{forYear}')
+    track_user_msg(user_id, msg.message_id)
+    # Remove user from earning state
+    EARNING_STATE.discard(user_id)
 
 @bot.callback_query_handler(func=lambda call: call.data in ['pillars', 'other_assets'])
 def handle_asset_group(call):
