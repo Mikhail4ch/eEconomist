@@ -36,8 +36,3 @@ class BITZ:
         amount = staked * self.aprForCalc()
         return f'Weekly you will earn:\n{round(amount/100*7,3)} BITZ'
 
-bitz = BITZ()
-print(bitz.findOutApr())
-print(bitz.annualAPR())
-print(bitz.howMuchEarnDaily(52.9))
-print(bitz.howMuchEarnWeekly(52.9))
