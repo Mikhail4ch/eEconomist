@@ -26,9 +26,20 @@ ASSETS = {
     '$LAIKA 🐶': 'LAIKA'
 }
 
+
+def is_nucleus_pool(pool_name):
+    # Remove protocol suffix for matching
+    base = pool_name.replace(' (Invariant)', '').strip()
+    tokens = base.split('/')
+    if len(tokens) != 2:
+        return False
+    pair_set = set([t.strip() for t in tokens])
+    # These are the Nucleus pairs (regardless of order)
+    return pair_set in [set(['tETH','ETH']), set(['tETH','USDC'])]
+
 def sticky_menu_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(types.KeyboardButton('Table of contents 🔙'))
+    markup.add(types.KeyboardButton('🦶 BACK'),types.KeyboardButton('Table of contents 📜'))
     return markup
 
 def track_user_msg(user_id, msg_id):
@@ -97,11 +108,11 @@ def menu_entry_point(call):
 
     # 2. Send menu message with keyboard
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton('Highest Yield 🏆 in the last 24H 🕔 (🔐)', callback_data='yield'))
+    markup.add(types.InlineKeyboardButton('Highest yield 🏆 in the last 24H 🕔 (🔐)', callback_data='yield'))
+    markup.add(types.InlineKeyboardButton('Cross-chain opportunities 🤞⛓️ (🔐)', callback_data='crosschain'))
     markup.add(types.InlineKeyboardButton('$BITZ stacking performance 🥩 (🔐)', callback_data='bitz'))
     markup.add(types.InlineKeyboardButton('Retroactive points 🪂 (🔐)', callback_data='points'))
-    markup.add(types.InlineKeyboardButton('Cross-chain opportunities 🤞⛓️ (🔐)', callback_data='crosschain'))
-    markup.add(types.InlineKeyboardButton('GameFi 🎮 & 💰(🔒)', callback_data='other_chapters'))
+    markup.add(types.InlineKeyboardButton('GameFi 🎮 & 💰 (🔒)', callback_data='other_chapters'))
     menu_msg = bot.send_message(
         chat_id,
         '<b>Table of contents</b> 📜',
@@ -124,7 +135,7 @@ def menu_entry_point(call):
     except Exception:
         pass
 
-@bot.message_handler(func=lambda m: m.text == 'Table of contents 🔙')
+@bot.message_handler(func=lambda m: m.text == 'Table of contents 📜')
 def menu_from_sticky(message):
     user_id = message.from_user.id
     chat_id = message.chat.id
@@ -133,6 +144,38 @@ def menu_from_sticky(message):
     delete_user_msgs(chat_id, user_id)
 
     # 2. Optionally delete the sticky button message itself (if you want)
+    try:
+        bot.delete_message(chat_id, message.message_id)
+    except Exception:
+        pass
+
+@bot.message_handler(func=lambda m: m.text == '🦶 BACK')
+def handle_back_button(message):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+
+    # Get all user's messages that are not permanent
+    permanent = set(PERMANENT_MSG_IDS.get(user_id, []))
+    user_msgs = USER_MSG_IDS.get(user_id, [])
+    
+    # Exclude permanent ones
+    non_perm_msgs = [msg_id for msg_id in user_msgs if msg_id not in permanent]
+    
+    if non_perm_msgs:
+        # Remove the last message from chat and the USER_MSG_IDS list
+        last_msg_id = non_perm_msgs[-1]
+        try:
+            bot.delete_message(chat_id, last_msg_id)
+        except Exception:
+            pass
+        # Remove from USER_MSG_IDS
+        USER_MSG_IDS[user_id].remove(last_msg_id)
+    else:
+        # Optional: Inform user there's nothing left to delete
+        msg = bot.send_message(chat_id, "No more messages to go back to 🦋")
+        track_user_msg(user_id, msg.message_id)
+
+    # Optionally delete the Back button press itself for cleanliness
     try:
         bot.delete_message(chat_id, message.message_id)
     except Exception:
@@ -151,15 +194,18 @@ def handle_menu(call):
     elif call.data == 'points':
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton('Invariant 🔱', callback_data='invariant'))
-        markup.add(types.InlineKeyboardButton('Umbra 🃏', callback_data='umbra'))
         markup.add(types.InlineKeyboardButton('Astrol 🔷', callback_data='astrol'))
-        markup.add(types.InlineKeyboardButton('AllDomains 🧘‍♂️', callback_data='alldomains'))
+        markup.add(types.InlineKeyboardButton('Deserialize 🆕', callback_data='deserialize'))
+        markup.add(types.InlineKeyboardButton('Umbra 🃏', callback_data='umbra'))
         markup.add(types.InlineKeyboardButton('EnsoFi ❇️', callback_data='ensofi'))
-        msg = bot.send_message(call.message.chat.id, "Choose DApp to earn retroactive points, fam 🎯\n\nNever underestimate ecosystem drops especially on Eclipse 🙃", reply_markup=markup)
+        markup.add(types.InlineKeyboardButton('AllDomains 🧘‍♂️', callback_data='alldomains'))
+        markup.add(types.InlineKeyboardButton('Turbo Girl 💋', callback_data='turbogirl'))
+        msg = bot.send_message(call.message.chat.id, "Choose DApp to earn retroactive points using your assets, fam 🎯\n\nNever underestimate ecosystem drops especially on Eclipse 🙃", reply_markup=markup)
         track_user_msg(call.from_user.id, msg.message_id)
     elif call.data == 'crosschain':
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton('Hyperlane ⏩', callback_data='hyperlane'))
+        markup.add(types.InlineKeyboardButton('Deserialize 🔝', callback_data='deserialize'))
         markup.add(types.InlineKeyboardButton('Relay 🕺', callback_data='relay'))
         markup.add(types.InlineKeyboardButton('More to come 🔜',callback_data='disabled'))
         msg = bot.send_message(call.message.chat.id,"<b>Retroactive</b> cross-chain interactions like 🌉 between Eclipse and other block⛓️s", parse_mode='html', reply_markup=markup)
@@ -168,7 +214,7 @@ def handle_menu(call):
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton('Data about staking APR％', callback_data='stacking'))
         markup.add(types.InlineKeyboardButton('Check how much you will earn 🫰', callback_data='earning'))
-        msg = bot.send_message(call.message.chat.id,"Let's look at incredible <b>$BITZ</b> upside 🔋", parse_mode='html', reply_markup=markup)
+        msg = bot.send_message(call.message.chat.id,"Explore incredible <b>$BITZ</b> upside🔋", parse_mode='html', reply_markup=markup)
         track_user_msg(call.from_user.id, msg.message_id)
     else:
         msg = bot.send_message(call.message.chat.id, "Coming tho0on!")
@@ -186,7 +232,7 @@ def handle_bitz(call):
         dataAnnual = bitz.annualAPR()
         msg = bot.send_message(
             call.message.chat.id,
-            f'Current $BITZ 24H APR:\n\n✅{dataBout24H}\nCurrent $BITZ annual APR:\n✅{dataAnnual}',
+            f'$BITZ 24H APR:\n✅{dataBout24H}\n\n$BITZ annual APR:\n✅{dataAnnual}',
             parse_mode='html',
         )
         track_user_msg(call.from_user.id, msg.message_id)
@@ -244,7 +290,7 @@ def handle_asset_group(call):
         )
         track_user_msg(call.from_user.id, msg.message_id)
 
-@bot.callback_query_handler(func=lambda call: call.data in ['hyperlane', 'relay'])
+@bot.callback_query_handler(func=lambda call: call.data in ['hyperlane', 'relay', 'deserialize'])
 def handle_bridges_group(call):
     if call.data == 'hyperlane':
         markup = types.InlineKeyboardMarkup()
@@ -268,15 +314,26 @@ def handle_bridges_group(call):
             reply_markup=markup
         )
         track_user_msg(call.from_user.id, msg.message_id)
+    elif call.data == 'deserialize':
+        markup = types.InlineKeyboardMarkup()
+        url = 'https://bridge.deserialize.xyz/'
+        markup.add(types.InlineKeyboardButton("Do some 🌉ing on Deserialize", url=url))
+        msg = bot.send_message(
+            call.message.chat.id,
+            "Cheap, reliable and fast cross-chain bridge supporting plenty of chains 👑\n\nSo far I didn't see info that points can be earned by bridging as well but <em>stay tuned</em> fams ⚠️",
+            parse_mode='html',
+            reply_markup=markup
+        )
+        track_user_msg(call.from_user.id, msg.message_id)
 
-@bot.callback_query_handler(func=lambda call: call.data in ['invariant', 'umbra', 'astrol', 'alldomains', 'ensofi'])
+@bot.callback_query_handler(func=lambda call: call.data in ['invariant', 'umbra', 'astrol', 'alldomains', 'ensofi', 'deserialize','turbogirl'])
 def handle_DApps_group(call):
     if call.data == 'invariant':
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton('Pools with points 🔱', callback_data='poolswithpointsInvariant'))
         msg = bot.send_message(
             call.message.chat.id,
-            "<em>Provide liquidity</em> to the pools and earn <strong>Invariant Points</strong> ✅\n\nRank at the top of the leaderboard to unlock <strong>points</strong> in other ecosystem projects too <em>(EDAS, EnsoFi and AllDomains)</em> 🎇",
+            "<em>Provide liquidity</em> to the pools and earn <strong>Invariant Points</strong> ✅\n\nRank at the top of the leaderboard to unlock <strong>points</strong> in other ecosystem projects too <em>(EDAS, EnsoFi, AllDomains and Nucleus)</em> 🎇",
             parse_mode='html',
             reply_markup=markup
         )
@@ -328,6 +385,29 @@ def handle_DApps_group(call):
             reply_markup=markup
         )
         track_user_msg(call.from_user.id, msg.message_id)
+    elif call.data == 'deserialize':
+        url = 'https://www.deserialize.xyz/'
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton('Forward to Deserialize 🔝', url=url))
+        msg = bot.send_message(
+            call.message.chat.id,
+            "Deserialize is the best Dex Aggregator for the eCommunity!\n\nRecently they have added <b>points system</b> 🔥 To earn points you simply need to swap your assets 🔁",
+            parse_mode='html',
+            reply_markup=markup
+        )
+        track_user_msg(call.from_user.id, msg.message_id)
+    elif call.data == 'turbogirl':
+        url = 'https://turbogirleclipselive.azmth.ai/'
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton('Get roasted by eGirl 🧎‍♂️‍➡️', url=url))
+        msg = bot.send_message(
+            call.message.chat.id,
+            "Share a slice of the <b>25M SAI Points</b> pie just by <em>calling and chatting</em> with Turbo Girl AI 📞✨\n\nNo need to flex your wallet here, just <strong>flirt to earn</strong> 😏",
+            parse_mode='html',
+            reply_markup=markup
+        )
+        track_user_msg(call.from_user.id, msg.message_id)
+
 
 @bot.callback_query_handler(func=lambda call: call.data in ['poolswithpointsInvariant', 'poolswithpointsUmbra'])
 def handle_poolswithpoints(call):
@@ -354,6 +434,12 @@ def handle_poolswithpoints(call):
                     activity_str = 'Low ‼️'
             except:
                 activity_str = str(activity)
+
+            pool_name = pair_and_yield.split(' : ')[0]
+            if is_nucleus_pool(pool_name):
+                    pool_name += ' ➕ Nucleus Points'
+                    pair_and_yield = pool_name + ' : ' + pair_and_yield.split(' : ')[1]
+
             text = f"{medal} {pair_and_yield}\nPool activity: {activity_str}\nTvl: 💲{tvl}"
             markup = types.InlineKeyboardMarkup()
             markup.add(types.InlineKeyboardButton("🌐 Go to the pool", url=url))
@@ -382,10 +468,10 @@ def handle_poolswithpoints(call):
                     activity_str = 'Low ‼️'
             except:
                 activity_str = str(activity)
-            text = f"{medal} {pair_and_yield}\nPool activity: {activity_str}\nTvl: 💲{tvl}"
+            text = f"{medal} <b>{pair_and_yield}</b>\n<b>Pool activity</b>: {activity_str}\n<b>Tvl</b>: 💲{tvl}"
             markup = types.InlineKeyboardMarkup()
             markup.add(types.InlineKeyboardButton("🌐 Go to the pool", url=url))
-            msg = bot.send_message(call.message.chat.id, text, reply_markup=markup)
+            msg = bot.send_message(call.message.chat.id, text, parse_mode="HTML", reply_markup=markup)
             track_user_msg(call.from_user.id, msg.message_id)
 
     
@@ -411,10 +497,16 @@ def pools_for_asset(call):
                 activity_str = 'Low ‼️'
         except:
             activity_str = str(activity)
-        text = f"{medal} {pair_and_yield}\nPool activity: {activity_str}\nTvl: 💲{tvl}"
+
+            pool_name = pair_and_yield.split(' : ')[0]
+            if is_nucleus_pool(pool_name):
+                    pool_name += ' ➕ Nucleus Points 😍'
+                    pair_and_yield = pool_name + ' : ' + pair_and_yield.split(' : ')[1]
+
+        text = f"{medal} <b>{pair_and_yield}</b>\n<b>Pool activity</b>: {activity_str}\n<b>Tvl</b>: 💲{tvl}"
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("🌐 Go to the pool", url=url))
-        msg = bot.send_message(call.message.chat.id, text, reply_markup=markup)
+        msg = bot.send_message(call.message.chat.id, text, parse_mode="HTML", reply_markup=markup)
         track_user_msg(call.from_user.id, msg.message_id)
 
 @bot.message_handler(commands=['gsvm','gsvn','tableofcontents','feedback','restart'])
@@ -504,7 +596,8 @@ def handle_unexpected_message(message):
     markup.add(types.InlineKeyboardButton("Turbo Girl 👧", url=url))
     msg = bot.send_message(
         chat_id,
-        text = "Hey eFam! Use the menu or button below to navigate the bot. eEconomist isn’t here for small talk 😅 but if you're feeling chatty, you can always take on Turbo Girl :)\nJust be warned… she will roast you 😉😈",
+        text = "Hey eFam! Use the menu or buttons below to navigate the bot. eEconomist isn’t here for small talk 😅 but if you're feeling chatty, you can always take on <b>Turbo Girl</b> :)\n\nJust be warned… she will roast you 😉😈",
+        parse_mode='HTML',
         reply_markup=markup
     )
     track_user_msg(user_id, msg.message_id)

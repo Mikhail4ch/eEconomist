@@ -34,11 +34,6 @@ class ORCA:
         self._tvlData = {}
 
     def bestYield24(self):
-        """
-        Returns a dictionary of top 3 pools by 24h yield:
-        { 'PAIR_STRING : APR%': pool_url }
-        Also prepares pool activity for those pools.
-        """
         results = []
         url_dict = {}
         activity_dict = {}
@@ -46,6 +41,10 @@ class ORCA:
 
         for asset in self._DATA:
             try:
+                tvl = float(asset.get('tvlUsdc', 0))
+                if tvl <= 0:
+                    continue  # skip zero TVL pools
+
                 yld = float(asset['stats']['24h']['yieldOverTvl']) * 100
                 yld_rounded = round(yld, 3)
                 tokenA = asset['tokenA']
@@ -55,7 +54,6 @@ class ORCA:
                 addressA = tokenA['address']
                 addressB = tokenB['address']
 
-                # Detect and prepare keys and URL
                 if symbolA == self._SYMBOL:
                     pair_str = f"{symbolA}/{symbolB} (Orca)"
                     pool_url = (
@@ -76,7 +74,6 @@ class ORCA:
                 url_dict[key] = pool_url
 
                 # Prepare activity for later
-                tvl = float(asset.get('tvlUsdc', 0))
                 volume = float(asset['stats']['24h'].get('volume', 0))
                 activity = round(volume / tvl, 3) if tvl else None
                 activity_dict[key] = activity
@@ -92,7 +89,6 @@ class ORCA:
         # Output with URLs
         output = {key: url_dict[key] for key, _, _ in results}
 
-        # Prepare pool activities for top pools (same keys as output)
         self._poolActivity = {key: activity_dict[key] for key in self._top_pool_keys}
         self._tvlData = {key: tvl_dict[key] for key in self._top_pool_keys}
 

@@ -51,6 +51,10 @@ class INVARIANT:
 
         for pool in pools:
             try:
+                tvl = float(pool.get('tvl', 0))
+                if tvl <= 0:
+                    continue  # skip zero TVL pools
+
                 apy = float(pool.get('apy', 0))
                 daily_yield = round(apy / 365, 3)
                 symbolX = ADDRESS_TO_SYMBOL.get(pool.get('tokenX'), pool.get('tokenX'))
@@ -58,23 +62,20 @@ class INVARIANT:
                 fee = float(pool.get('fee'))
                 fee_str = f"{fee:.2f}".replace('.', '_')
                 volume = float(pool.get('volume', 0))
-                tvl = float(pool.get('tvl', 0))
                 activity = round(volume / tvl, 4) if tvl else 0
 
-                if pool.get('tokenX') == token_addr:
-                    pair = f"{symbolX}/{symbolY} (Invariant)"
-                    url = f"https://eclipse.invariant.app/newPosition/{symbolX}/{symbolY}/{fee_str}"
-                elif pool.get('tokenY') == token_addr:
-                    pair = f"{symbolY}/{symbolX} (Invariant)"
-                    url = f"https://eclipse.invariant.app/newPosition/{symbolY}/{symbolX}/{fee_str}"
-                else:
-                    continue
+                if pool.get('tokenX') == token_addr or pool.get('tokenY') == token_addr:
+                    if pool.get('tokenX') == token_addr:
+                        pair = f"{symbolX}/{symbolY} (Invariant)"
+                        url = f"https://eclipse.invariant.app/newPosition/{symbolX}/{symbolY}/{fee_str}"
+                    else:
+                        pair = f"{symbolY}/{symbolX} (Invariant)"
+                        url = f"https://eclipse.invariant.app/newPosition/{symbolY}/{symbolX}/{fee_str}"
 
-                # Only best per pair
-                if pair not in best_per_pair or daily_yield > best_per_pair[pair][0]:
-                    best_per_pair[pair] = (daily_yield, url)
-                    best_per_activity[pair] = activity
-                    best_per_tvl[pair] = int(round(tvl,0))
+                    if pair not in best_per_pair or daily_yield > best_per_pair[pair][0]:
+                        best_per_pair[pair] = (daily_yield, url)
+                        best_per_activity[pair] = activity
+                        best_per_tvl[pair] = int(round(tvl,0))
             except Exception:
                 continue
 
@@ -82,10 +83,9 @@ class INVARIANT:
         sorted_pairs = sorted(best_per_pair.items(), key=lambda x: x[1][0], reverse=True)[:3]
 
         output = {
-            f"{pair} : {yield_}％": {url}
+            f"{pair} : {yield_}％": url
             for pair, (yield_, url) in sorted_pairs
         }
-        # Full key includes yield in output and activity dict
         self._poolActivity = {
             f"{pair} : {yield_}％": best_per_activity[pair]
             for pair, (yield_, url) in sorted_pairs
