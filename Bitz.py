@@ -16,7 +16,7 @@ class BITZ:
         data = json.loads(response.text)
         totalStaked = data['data']['tokens'][0]['balance']
         self._currentAPR = round(self._rewardPool/totalStaked*100,3)
-        return f'24H APR = {self._currentAPR}％'
+        return self._currentAPR
     def aprForCalc(self):
         response = requests.get(self._api, headers=headers)
         data = json.loads(response.text)
@@ -28,7 +28,7 @@ class BITZ:
         data = json.loads(response.text)
         totalStaked = data['data']['tokens'][0]['balance']
         self._currentAPR = round(self._rewardPool/totalStaked*365*100)
-        return f'Annual APR = {self._currentAPR}％'
+        return self._currentAPR
     def howMuchEarnDaily(self, staked):
         amount = staked * self.aprForCalc()
         return f'Daily you will earn:\n{round(amount/100,3)} $BITZ'

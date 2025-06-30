@@ -21,6 +21,8 @@ class TOP5:
         # Flatten all key-url pairs into a list of (key, url, apr)
         all_entries = []
         for d in dicts:
+            if not isinstance(d, dict):
+                continue
             for k, v in d.items():
                 url = None
                 if isinstance(v, set):

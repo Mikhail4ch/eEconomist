@@ -2,6 +2,7 @@ import telebot
 from telebot import types
 from TOP import TOP5
 from Bitz import BITZ
+from sBitz import sBITZ
 
 bot = telebot.TeleBot('7968913931:AAFrFTAOgxaiN4MoMOPhHJmk3o5qAnsgYNc')
 
@@ -10,13 +11,16 @@ USER_MSG_IDS = {}         # For context (yields, etc.)
 PERMANENT_MSG_IDS = {}    # For all "permanent" UI messages
 MENU_IMAGE_ID = {}        # Last sent menu image (book.png) per user
 EARNING_STATE = set()
+HOLDING_STATE = set()
 
 # NEW: For sticky/menu messages sent from sticky button!
 STICKY_MSG_ID = {}
 LAST_MENU_MSG_ID = {}
+POOL_MSG_IDS = {} 
 
 ASSETS = {
     '$BITZ ⛏️': 'BITZ',
+    '$sBITZ 🥩': 'sBITZ',
     '$tUSD 💵': 'TUSD',
     '$tETH 💎': 'tETH',
     '$ETH 💎': 'ETH',
@@ -26,6 +30,9 @@ ASSETS = {
     '$LAIKA 🐶': 'LAIKA'
 }
 
+
+def track_pool_msg(user_id, msg_id):
+    POOL_MSG_IDS.setdefault(user_id, []).append(msg_id)
 
 def is_nucleus_pool(pool_name):
     # Remove protocol suffix for matching
@@ -61,6 +68,7 @@ def start(message):
     chat_id = message.chat.id
 
     EARNING_STATE.discard(user_id)
+    HOLDING_STATE.discard(user_id)
 
     # Welcome image and greeting
     file = open('./Eclipse Economy.jpeg', 'rb')
@@ -101,16 +109,17 @@ def menu_entry_point(call):
     LAST_MENU_MSG_ID[user_id] = None
 
     # 1. Send menu image (book.png)
-    file = open('./book.png', 'rb')
+    file = open('./bookaa1.jpg', 'rb')
     photo_msg = bot.send_photo(chat_id, file)
     MENU_IMAGE_ID[user_id] = photo_msg.message_id
     PERMANENT_MSG_IDS.setdefault(user_id, []).append(photo_msg.message_id)
 
     # 2. Send menu message with keyboard
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton('Highest yield 🏆 in the last 24H 🕔 (🔐)', callback_data='yield'))
-    markup.add(types.InlineKeyboardButton('Cross-chain opportunities 🤞⛓️ (🔐)', callback_data='crosschain'))
+    markup.add(types.InlineKeyboardButton('Pools with highest yield 🏆 in 24H 🕔 (🔐)', callback_data='yield'))
     markup.add(types.InlineKeyboardButton('$BITZ stacking performance 🥩 (🔐)', callback_data='bitz'))
+    markup.add(types.InlineKeyboardButton('$sBITZ holding performance 💧 (🔐)', callback_data='sbitz'))
+    markup.add(types.InlineKeyboardButton('Cross-chain opportunities 🤞⛓️ (🔐)', callback_data='crosschain'))
     markup.add(types.InlineKeyboardButton('Retroactive points 🪂 (🔐)', callback_data='points'))
     markup.add(types.InlineKeyboardButton('GameFi 🎮 & 💰 (🔒)', callback_data='other_chapters'))
     menu_msg = bot.send_message(
@@ -124,7 +133,7 @@ def menu_entry_point(call):
     # 3. Sticky button below menu for convenience
     sticky_msg = bot.send_message(
         chat_id,
-        "To return to the Table of contents anytime use the Menu or press the button below 👇",
+        "Use the Menu or buttons below to navigate easily 🧭",
         reply_markup=sticky_menu_keyboard()
     )
     PERMANENT_MSG_IDS[user_id].append(sticky_msg.message_id)
@@ -154,40 +163,56 @@ def handle_back_button(message):
     user_id = message.from_user.id
     chat_id = message.chat.id
 
-    # Get all user's messages that are not permanent
+    pool_msgs = POOL_MSG_IDS.get(user_id, [])
+    if pool_msgs:
+        # Delete all pool messages
+        for msg_id in pool_msgs:
+            try:
+                bot.delete_message(chat_id, msg_id)
+            except Exception:
+                pass
+        # Remove pool message IDs from USER_MSG_IDS as well
+        if user_id in USER_MSG_IDS:
+            USER_MSG_IDS[user_id] = [mid for mid in USER_MSG_IDS[user_id] if mid not in pool_msgs]
+        POOL_MSG_IDS[user_id] = []
+
+        # Optionally, delete the BACK press message itself for cleanliness
+        try:
+            bot.delete_message(chat_id, message.message_id)
+        except Exception:
+            pass
+        return  # Don't proceed to regular back logic
+
+    # --- Default behavior (delete last non-permanent message) ---
     permanent = set(PERMANENT_MSG_IDS.get(user_id, []))
     user_msgs = USER_MSG_IDS.get(user_id, [])
-    
-    # Exclude permanent ones
     non_perm_msgs = [msg_id for msg_id in user_msgs if msg_id not in permanent]
-    
+
     if non_perm_msgs:
-        # Remove the last message from chat and the USER_MSG_IDS list
         last_msg_id = non_perm_msgs[-1]
         try:
             bot.delete_message(chat_id, last_msg_id)
         except Exception:
             pass
-        # Remove from USER_MSG_IDS
         USER_MSG_IDS[user_id].remove(last_msg_id)
     else:
-        # Optional: Inform user there's nothing left to delete
-        msg = bot.send_message(chat_id, "No more messages to go back to 🦋")
+        msg = bot.send_message(chat_id, "No more messages to go back to 😜")
         track_user_msg(user_id, msg.message_id)
 
-    # Optionally delete the Back button press itself for cleanliness
+    # Optionally delete the Back button press itself
     try:
         bot.delete_message(chat_id, message.message_id)
     except Exception:
         pass
 
+
 # ---- Menu Handlers for yield/other_chapters ----
 
-@bot.callback_query_handler(func=lambda call: call.data in ['yield', 'points', 'crosschain','other_chapters','bitz'])
+@bot.callback_query_handler(func=lambda call: call.data in ['yield', 'points', 'crosschain','other_chapters','bitz', 'sbitz'])
 def handle_menu(call):
     if call.data == 'yield':
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton('eEconomy pillars 🏛: $BITZ, $tETH, $tUSD and $ES', callback_data='pillars'))
+        markup.add(types.InlineKeyboardButton('eEconomy pillars 🏛: $BITZ, $tETH, $ES and etc.', callback_data='pillars'))
         markup.add(types.InlineKeyboardButton('Other assets 📊: $ETH, $USDC, $SOL and etc.', callback_data='other_assets'))
         msg = bot.send_message(call.message.chat.id, "Choose pool group fam 🤔", reply_markup=markup)
         track_user_msg(call.from_user.id, msg.message_id)
@@ -212,9 +237,15 @@ def handle_menu(call):
         track_user_msg(call.from_user.id, msg.message_id)
     elif call.data == 'bitz':
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton('Data about staking APR％', callback_data='stacking'))
-        markup.add(types.InlineKeyboardButton('Check how much you will earn 🫰', callback_data='earning'))
+        markup.add(types.InlineKeyboardButton('APR data 📊', callback_data='stacking'))
+        markup.add(types.InlineKeyboardButton('Calculate yield estimates 🧮', callback_data='earning'))
         msg = bot.send_message(call.message.chat.id,"Explore incredible <b>$BITZ</b> upside🔋", parse_mode='html', reply_markup=markup)
+        track_user_msg(call.from_user.id, msg.message_id)
+    elif call.data == 'sbitz':
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton('APY data 📊', callback_data='compounding'))
+        markup.add(types.InlineKeyboardButton('Calculate yield estimates 🧮', callback_data='searning'))
+        msg = bot.send_message(call.message.chat.id,"Explore incredible <b>$sBITZ</b> upside🔋", parse_mode='html', reply_markup=markup)
         track_user_msg(call.from_user.id, msg.message_id)
     else:
         msg = bot.send_message(call.message.chat.id, "Coming tho0on!")
@@ -232,13 +263,30 @@ def handle_bitz(call):
         dataAnnual = bitz.annualAPR()
         msg = bot.send_message(
             call.message.chat.id,
-            f'$BITZ 24H APR:\n✅{dataBout24H}\n\n$BITZ annual APR:\n✅{dataAnnual}',
+            f'$BITZ 24H APR:\n✅{dataBout24H}％\n\n$BITZ annual APR:\n✅{dataAnnual}％',
             parse_mode='html',
         )
         track_user_msg(call.from_user.id, msg.message_id)
     elif call.data == 'earning':
         EARNING_STATE.add(call.from_user.id)
-        msg = bot.send_message(call.message.chat.id, 'Enter the number of $BITZ you want to stake, fam: ')
+        msg = bot.send_message(call.message.chat.id, 'Enter the number of $BITZ you wanna stake, fam: ')
+        track_user_msg(call.from_user.id, msg.message_id)
+
+@bot.callback_query_handler(func=lambda call: call.data in ['compounding', 'searning'])
+def handle_bitz(call):
+    if call.data == 'compounding':
+        sbitz = sBITZ()
+        dataBout24H = sbitz.calculate_daily_compounding_yield()
+        dataAnnual = sbitz.calculate_apy()
+        msg = bot.send_message(
+            call.message.chat.id,
+            f'$sBITZ 24H APY:\n✅{dataBout24H}％\n\n$sBITZ annual APY:\n✅{dataAnnual}％',
+            parse_mode='html',
+        )
+        track_user_msg(call.from_user.id, msg.message_id)
+    elif call.data == 'searning':
+        HOLDING_STATE.add(call.from_user.id)
+        msg = bot.send_message(call.message.chat.id, 'Enter the number of $sBITZ you gonna hold, fam: ')
         track_user_msg(call.from_user.id, msg.message_id)
 
 @bot.message_handler(func=lambda m: m.from_user.id in EARNING_STATE)
@@ -266,11 +314,36 @@ def get_potentialEarnings(message):
     # Remove user from earning state
     EARNING_STATE.discard(user_id)
 
+@bot.message_handler(func=lambda m: m.from_user.id in HOLDING_STATE)
+def get_potentialHoldings(message):
+    user_id = message.from_user.id
+    # NEW: Track the user's own message ID so it gets cleaned up!
+    track_user_msg(user_id, message.message_id)
+    try:
+        staked = float(message.text.strip())
+        if staked < 0:
+            raise ValueError
+    except Exception:
+        msg = bot.send_message(message.chat.id, "❌ Enter a valid positive number for $BITZ amount.")
+        track_user_msg(user_id, msg.message_id)
+        return
+    sbitz = sBITZ()
+    forDay = sbitz.howMuchEarnDaily(staked)
+    forWeek = sbitz.howMuchEarnWeekly(staked)
+    forMonth = sbitz.howMuchEarnMonthly(staked)
+    forYear = sbitz.howMuchYearly(staked)
+    msg = bot.send_message(
+        message.chat.id,
+        f'Lets see fam how much $sBITZ you will earn 👀\n\n💹{forDay}\n💹{forWeek}\n💹{forMonth}\n💹{forYear}')
+    track_user_msg(user_id, msg.message_id)
+    # Remove user from earning state
+    HOLDING_STATE.discard(user_id)
+
 @bot.callback_query_handler(func=lambda call: call.data in ['pillars', 'other_assets'])
 def handle_asset_group(call):
     if call.data == 'pillars':
         markup = types.InlineKeyboardMarkup()
-        for key in ['$BITZ ⛏️', '$tUSD 💵', '$tETH 💎']:
+        for key in ['$BITZ ⛏️', '$sBITZ 🥩', '$tUSD 💵', '$tETH 💎']:
             markup.add(types.InlineKeyboardButton(key, callback_data=key))
         markup.add(types.InlineKeyboardButton('$ES 🎇 (tho0on)', callback_data='disabled'))
         msg = bot.send_message(
@@ -279,6 +352,9 @@ def handle_asset_group(call):
             reply_markup=markup
         )
         track_user_msg(call.from_user.id, msg.message_id)
+
+    #elif call.data == 'sBITZ'
+
     elif call.data == 'other_assets':
         markup = types.InlineKeyboardMarkup()
         for key in ['$ETH 💎', '$USDC 💵', '$USDT 💵', '$SOL 🚀', '$LAIKA 🐶']:
@@ -419,7 +495,7 @@ def handle_poolswithpoints(call):
         if not poolsDict:
             bot.send_message(call.message.chat.id, "No Invariant Points pools found at the moment.")
             return
-        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣"]
+        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"]
         for idx, (pair_and_yield, url) in enumerate(poolsDict.items()):
             activity = poolsActivity.get(pair_and_yield, "N/A")
             tvl = tvlData.get(pair_and_yield, "N/A")
@@ -444,6 +520,7 @@ def handle_poolswithpoints(call):
             markup = types.InlineKeyboardMarkup()
             markup.add(types.InlineKeyboardButton("🌐 Go to the pool", url=url))
             msg = bot.send_message(call.message.chat.id, text, reply_markup=markup)
+            track_pool_msg(call.from_user.id, msg.message_id)
             track_user_msg(call.from_user.id, msg.message_id)
     elif call.data == 'poolswithpointsUmbra':
         top = TOP5('')
@@ -472,6 +549,7 @@ def handle_poolswithpoints(call):
             markup = types.InlineKeyboardMarkup()
             markup.add(types.InlineKeyboardButton("🌐 Go to the pool", url=url))
             msg = bot.send_message(call.message.chat.id, text, parse_mode="HTML", reply_markup=markup)
+            track_pool_msg(call.from_user.id, msg.message_id)
             track_user_msg(call.from_user.id, msg.message_id)
 
     
@@ -480,6 +558,10 @@ def pools_for_asset(call):
     asset = ASSETS[call.data]
     top = TOP5(asset)
     bestYield = top.theBestYield()
+    if not bestYield:
+        msg = bot.send_message(call.message.chat.id, "No pools found for this asset.")
+        track_user_msg(call.from_user.id, msg.message_id)
+        return
     poolsActivity = top.poolsActivity()
     tvlData = top.tvlData()
     medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
@@ -507,9 +589,10 @@ def pools_for_asset(call):
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("🌐 Go to the pool", url=url))
         msg = bot.send_message(call.message.chat.id, text, parse_mode="HTML", reply_markup=markup)
+        track_pool_msg(call.from_user.id, msg.message_id)
         track_user_msg(call.from_user.id, msg.message_id)
 
-@bot.message_handler(commands=['gsvm','gsvn','tableofcontents','feedback','restart'])
+@bot.message_handler(commands=['gsvm','gsvn','tableofcontents','feedback','restart','back'])
 def handle_commands(message):
     command = message.text.split()[0].lstrip('/')
     user_id = message.from_user.id
@@ -525,6 +608,12 @@ def handle_commands(message):
         track_user_msg(user_id, msg.message_id)
     elif command == 'tableofcontents':
         delete_user_msgs(chat_id, user_id)
+        try:
+            bot.delete_message(chat_id, message.message_id)
+        except Exception:
+            pass
+    elif command == 'back':
+        handle_back_button(message)
         try:
             bot.delete_message(chat_id, message.message_id)
         except Exception:

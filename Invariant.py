@@ -15,12 +15,14 @@ TOKEN_ADDRESS = {
     'tETH': 'GU7NS9xCwgNPiAdJ69iusFrRfawjDDPjeMBovhV1d4kn',
     'TUSD': '27Kkn8PWJbKJsRZrxbsYDdedpUQKnJ5vNfserCxNEJ3R',
     'LAIKA': 'LaihKXA47apnS599tyEyasY2REfEzBNe4heunANhsMx',
+    'sBITZ': 'sBTZcSwRZhRq3JcjFh1xwxgCxmsN7MreyU3Zx8dA8uF',
     'MCT': '82kkga2kBcQNyV4VKJhGvE7Z58fFavVyuh5NapMVo7Qs'
 }
 
 POOLS_WITH_POINTS = {
     'ETH/USDC': 'HRgVv1pyBLXdsAddq4ubSqo8xdQWRrYbvmXqEDtectce',
     'BITZ/ETH': 'HG7iQMk29cgs74ZhSwrnye3C6SLQwKnfsbXqJVRi1x8H',
+    'sBITZ/ETH': '9RkzLPufg9RVxRLXZx1drZvf1gXLwgffnhW9oFJSstad',
     'SOL/ETH': '86vPh8ctgeQnnn8qPADy5BkzrqoH5XjMCWvkd4tYhhmM',
     'SOL/USDC': 'E2B7KUFwjxrsy9cC17hmadPsxWHD1NufZXTyrtuz8YxC',
     'tETH/ETH': 'FvVsbwsbGVo6PVfimkkPhpcRfBrRitiV946nMNNuz7f9',
