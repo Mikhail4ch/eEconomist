@@ -15,7 +15,7 @@ TOKEN_ADDRESS = {
     'tETH': 'GU7NS9xCwgNPiAdJ69iusFrRfawjDDPjeMBovhV1d4kn',
     'TUSD': '27Kkn8PWJbKJsRZrxbsYDdedpUQKnJ5vNfserCxNEJ3R',
     'LAIKA': 'LaihKXA47apnS599tyEyasY2REfEzBNe4heunANhsMx',
-    'sBITZ': 'sBTZcSwRZhRq3JcjFh1xwxgCxmsN7MreyU3Zx8dA8uF',
+    'SBITZ': 'sBTZcSwRZhRq3JcjFh1xwxgCxmsN7MreyU3Zx8dA8uF',
     'MCT': '82kkga2kBcQNyV4VKJhGvE7Z58fFavVyuh5NapMVo7Qs'
 }
 
@@ -33,7 +33,9 @@ ADDRESS_TO_SYMBOL = {v: k for k, v in TOKEN_ADDRESS.items()}
 
 class INVARIANT:
     def __init__(self, symbol):
-        self._SYMBOL = symbol
+        self._SYMBOL = symbol.upper()
+    
+    def fetch_data(self):
         url = 'https://stats.invariant.app/eclipse/intervals/eclipse-mainnet?interval=daily'
         response = requests.get(url, headers=headers)
         self._DATA = json.loads(response.text)
@@ -85,20 +87,20 @@ class INVARIANT:
         sorted_pairs = sorted(best_per_pair.items(), key=lambda x: x[1][0], reverse=True)[:3]
 
         output = {
-            f"{pair} : {yield_}％": url
+            f"{pair} | {yield_}％": url
             for pair, (yield_, url) in sorted_pairs
         }
         self._poolActivity = {
-            f"{pair} : {yield_}％": best_per_activity[pair]
+            f"{pair} | {yield_}％": best_per_activity[pair]
             for pair, (yield_, url) in sorted_pairs
         }
         self._tvlData ={
-            f"{pair} : {yield_}％": best_per_tvl[pair]
+            f"{pair} | {yield_}％": best_per_tvl[pair]
             for pair, (yield_, url) in sorted_pairs
         }
 
         if not output:
-            return f"No pools found for symbol: {self._SYMBOL}"
+            return {}
         return output
 
     def poolActivities(self):
@@ -109,12 +111,10 @@ class INVARIANT:
         result = {}
         pools = self._DATA.get('poolsData', [])
 
-        # Reverse lookup for address to POOL_NAME
         addr_to_pool = {v: k for k, v in POOLS_WITH_POINTS.items()}
 
         for pool in pools:
             pool_addr = pool.get('poolAddress')
-            # Check if the pool address is in our tracked pools
             pool_name = addr_to_pool.get(pool_addr)
             if not pool_name:
                 continue
@@ -129,11 +129,9 @@ class INVARIANT:
             tokenX = ADDRESS_TO_SYMBOL.get(pool.get('tokenX'), pool.get('tokenX'))
             tokenY = ADDRESS_TO_SYMBOL.get(pool.get('tokenY'), pool.get('tokenY'))
 
-            # Build the URL in the same way as in bestYield24()
             url = f"https://eclipse.invariant.app/newPosition/{tokenX}/{tokenY}/{fee_str}"
 
-            # Key format: "POOL_NAME : daily_apr%"
-            key = f"{pool_name} : {daily_apr}％"
+            key = f"{pool_name} | {daily_apr}％"
             result[key] = url
             self._poolWithPoActivity[key] = activity
             self._poolWithPotvlData[key] = int(round(tvl,0))
@@ -141,7 +139,7 @@ class INVARIANT:
     def poolsWithPointsActivity(self):
         return self._poolWithPoActivity 
     def poolsWithPointsTVL(self):
-        return self._poolWithPotvlData 
+        return self._poolWithPotvlData
 
 
 

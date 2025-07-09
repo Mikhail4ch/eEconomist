@@ -3,8 +3,15 @@ from telebot import types
 from TOP import TOP5
 from Bitz import BITZ
 from sBitz import sBITZ
+import time
+from threading import Lock
+import threading
 
 bot = telebot.TeleBot('7968913931:AAFrFTAOgxaiN4MoMOPhHJmk3o5qAnsgYNc')
+
+TOP5_CACHE = {}  # { symbol: { 'obj': TOP5, 'time': timestamp } }
+CACHE_TTL = 120
+CACHE_LOCK = Lock()
 
 # Tracking
 USER_MSG_IDS = {}         # For context (yields, etc.)
@@ -20,7 +27,7 @@ POOL_MSG_IDS = {}
 
 ASSETS = {
     '$BITZ ⛏️': 'BITZ',
-    '$sBITZ 🥩': 'sBITZ',
+    '$sBITZ 💧': 'sBITZ',
     '$tUSD 💵': 'TUSD',
     '$tETH 💎': 'tETH',
     '$ETH 💎': 'ETH',
@@ -30,9 +37,42 @@ ASSETS = {
     '$LAIKA 🐶': 'LAIKA'
 }
 
+POINTS = {
+    'BITZ/ETH': 3456000,
+    'sBITZ/ETH': 6048000,
+    'SOL/USDC': 2160000,
+    'ETH/USDC': 8640000,
+    'SOL/ETH': 2592000,
+    'tETH/ETH': 864000,
+    'tUSD/USDC': 518400
+}
+
 
 def track_pool_msg(user_id, msg_id):
     POOL_MSG_IDS.setdefault(user_id, []).append(msg_id)
+
+def normalize_pool_name(name):
+    return name.replace(' (Invariant)', '').strip().upper()
+
+def get_top5(symbol):
+    now = time.time()
+    with CACHE_LOCK:
+        cache_entry = TOP5_CACHE.get(symbol)
+        if cache_entry and now - cache_entry['time'] < CACHE_TTL:
+            return cache_entry['obj']
+        top = TOP5(symbol)
+        top.fetch_all()  # if needed
+        TOP5_CACHE[symbol] = {'obj': top, 'time': now}
+        return top
+    
+def cache_refresher():
+    while True:
+        with CACHE_LOCK:
+            for symbol in list(TOP5_CACHE.keys()):
+                top = TOP5(symbol)
+                top.fetch_all()
+                TOP5_CACHE[symbol] = {'obj': top, 'time': time.time()}
+        time.sleep(CACHE_TTL)
 
 def is_nucleus_pool(pool_name):
     # Remove protocol suffix for matching
@@ -116,12 +156,12 @@ def menu_entry_point(call):
 
     # 2. Send menu message with keyboard
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton('Pools with highest yield 🏆 in 24H 🕔 (🔐)', callback_data='yield'))
-    markup.add(types.InlineKeyboardButton('$BITZ stacking performance 🥩 (🔐)', callback_data='bitz'))
-    markup.add(types.InlineKeyboardButton('$sBITZ holding performance 💧 (🔐)', callback_data='sbitz'))
-    markup.add(types.InlineKeyboardButton('Cross-chain opportunities 🤞⛓️ (🔐)', callback_data='crosschain'))
-    markup.add(types.InlineKeyboardButton('Retroactive points 🪂 (🔐)', callback_data='points'))
-    markup.add(types.InlineKeyboardButton('GameFi 🎮 & 💰 (🔒)', callback_data='other_chapters'))
+    markup.add(types.InlineKeyboardButton('Pools with highest yield 🏆 in 24H 🕔', callback_data='yield'))
+    markup.add(types.InlineKeyboardButton('$BITZ staking performance 🥩', callback_data='bitz'))
+    markup.add(types.InlineKeyboardButton('$sBITZ holding performance 💧', callback_data='sbitz'))
+    markup.add(types.InlineKeyboardButton('Cross-chain opportunities 🤞⛓️', callback_data='crosschain'))
+    markup.add(types.InlineKeyboardButton('Retroactive points 🪂', callback_data='points'))
+    markup.add(types.InlineKeyboardButton('GameFi 🎮 & 💰', callback_data='gamefi'))
     menu_msg = bot.send_message(
         chat_id,
         '<b>Table of contents</b> 📜',
@@ -208,7 +248,7 @@ def handle_back_button(message):
 
 # ---- Menu Handlers for yield/other_chapters ----
 
-@bot.callback_query_handler(func=lambda call: call.data in ['yield', 'points', 'crosschain','other_chapters','bitz', 'sbitz'])
+@bot.callback_query_handler(func=lambda call: call.data in ['yield', 'points', 'crosschain','gamefi','bitz', 'sbitz'])
 def handle_menu(call):
     if call.data == 'yield':
         markup = types.InlineKeyboardMarkup()
@@ -246,6 +286,13 @@ def handle_menu(call):
         markup.add(types.InlineKeyboardButton('APY data 📊', callback_data='compounding'))
         markup.add(types.InlineKeyboardButton('Calculate yield estimates 🧮', callback_data='searning'))
         msg = bot.send_message(call.message.chat.id,"Explore incredible <b>$sBITZ</b> upside🔋", parse_mode='html', reply_markup=markup)
+        track_user_msg(call.from_user.id, msg.message_id)
+    elif call.data == 'gamefi':
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton('Werm 🪱', callback_data='werm'))
+        markup.add(types.InlineKeyboardButton('Cryptara 🏰', callback_data='cryptara'))
+        markup.add(types.InlineKeyboardButton('Doiq 🏆', callback_data='doiq'))
+        msg = bot.send_message(call.message.chat.id,"Have fun and compete for the <b>real rewards</b> 💰 with eGaming on <strong>Eclipse</strong> 💫", parse_mode='html', reply_markup=markup)
         track_user_msg(call.from_user.id, msg.message_id)
     else:
         msg = bot.send_message(call.message.chat.id, "Coming tho0on!")
@@ -343,7 +390,7 @@ def get_potentialHoldings(message):
 def handle_asset_group(call):
     if call.data == 'pillars':
         markup = types.InlineKeyboardMarkup()
-        for key in ['$BITZ ⛏️', '$sBITZ 🥩', '$tUSD 💵', '$tETH 💎']:
+        for key in ['$BITZ ⛏️', '$sBITZ 💧', '$tUSD 💵', '$tETH 💎']:
             markup.add(types.InlineKeyboardButton(key, callback_data=key))
         markup.add(types.InlineKeyboardButton('$ES 🎇 (tho0on)', callback_data='disabled'))
         msg = bot.send_message(
@@ -401,6 +448,45 @@ def handle_bridges_group(call):
             reply_markup=markup
         )
         track_user_msg(call.from_user.id, msg.message_id)
+
+
+
+@bot.callback_query_handler(func=lambda call: call.data in ['werm', 'cryptara', 'doiq'])
+def handle_games_group(call):
+    if call.data == 'werm':
+        markup = types.InlineKeyboardMarkup()
+        url = 'https://werm.fun/'
+        markup.add(types.InlineKeyboardButton("Play Werm 🎮", url=url))
+        msg = bot.send_message(
+            call.message.chat.id,
+            "Werm is a game that's quickly become an eCommunity favorite, embodying the competitive spirit of Web3 for many eFams 🤺\n\nParticipate in tournaments (entry fee required) and <b>win or lose some $</b> based on your performance\n\nIn short: the better you play - the more you earn, fam 😏",
+            parse_mode='html',
+            reply_markup=markup
+        )
+        track_user_msg(call.from_user.id, msg.message_id)
+    elif call.data == 'cryptara':
+        markup = types.InlineKeyboardMarkup()
+        url = 'https://eclipse.cryptara.world/'
+        markup.add(types.InlineKeyboardButton("Play Cryptara 🎮", url=url))
+        msg = bot.send_message(
+            call.message.chat.id,
+            "Cryptara Conquest is an adrenaline-packed sci-fi bullet-hell survival game where strategy and sharp reflexes lead to victory ⚔️\n\nCryptara is tough but what could be better for gamers who thrive on a challenge? 😉\n\nRise to the top of the leaderboard and claim your share of the $LAIKA and $BITZ prize pool 🤑 (including real-time dungeon loot in $LAIKA)",
+            parse_mode='html',
+            reply_markup=markup
+        )
+        track_user_msg(call.from_user.id, msg.message_id)
+    elif call.data == 'doiq':
+        markup = types.InlineKeyboardMarkup()
+        url = 'https://doiq.xyz/'
+        markup.add(types.InlineKeyboardButton("Play doiq 🎮", url=url))
+        msg = bot.send_message(
+            call.message.chat.id,
+            "A 90s retro social RPG morphing memes & speculation. Battle, shop, craft, bet & rob players to thrive 😜\n\nNot long ago, they hosted the BABY CUP - fewer participants but a <b>solid prize pool</b>, giving winners great odds 😼\n\n<b>Earn pineapples</b> (the base currency of the game). Pineapples are then used for upgrades, skills, items, casino games, evolving into one of three character paths and so much more ✍️",
+            parse_mode='html',
+            reply_markup=markup
+        )
+        track_user_msg(call.from_user.id, msg.message_id)
+
 
 @bot.callback_query_handler(func=lambda call: call.data in ['invariant', 'umbra', 'astrol', 'alldomains', 'ensofi', 'deserialize','turbogirl'])
 def handle_DApps_group(call):
@@ -484,11 +570,10 @@ def handle_DApps_group(call):
         )
         track_user_msg(call.from_user.id, msg.message_id)
 
-
 @bot.callback_query_handler(func=lambda call: call.data in ['poolswithpointsInvariant', 'poolswithpointsUmbra'])
 def handle_poolswithpoints(call):
     if call.data == 'poolswithpointsInvariant':
-        top = TOP5('')
+        top = get_top5('points-invariant')
         poolsDict = top.topPointsPools('Invariant')
         poolsActivity = top.topPointsPoolsActivity('Invariant')
         tvlData = top.topPointsPooolsTVL('Invariant')
@@ -497,8 +582,20 @@ def handle_poolswithpoints(call):
             return
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"]
         for idx, (pair_and_yield, url) in enumerate(poolsDict.items()):
-            activity = poolsActivity.get(pair_and_yield, "N/A")
-            tvl = tvlData.get(pair_and_yield, "N/A")
+            # Only support ' | ' as separator!
+            if ' | ' not in pair_and_yield:
+                continue  # skip weird keys
+
+            pool_name, yield_part = pair_and_yield.split(' | ', 1)
+            orig_pair_and_yield = pair_and_yield  # for correct lookups
+
+            # Nucleus pool visual, but KEEP orig_pair_and_yield for lookup!
+            display_pool_name = pool_name
+            if is_nucleus_pool(pool_name):
+                display_pool_name += ' ➕ Nucleus Points'
+
+            activity = poolsActivity.get(orig_pair_and_yield, "N/A")
+            tvl = tvlData.get(orig_pair_and_yield, "N/A")
             medal = medals[idx] if idx < len(medals) else ""
             try:
                 a = float(activity)
@@ -511,19 +608,25 @@ def handle_poolswithpoints(call):
             except:
                 activity_str = str(activity)
 
-            pool_name = pair_and_yield.split(' : ')[0]
-            if is_nucleus_pool(pool_name):
-                    pool_name += ' ➕ Nucleus Points'
-                    pair_and_yield = pool_name + ' : ' + pair_and_yield.split(' : ')[1]
+            points = None
+            norm_pool_name = normalize_pool_name(pool_name)
+            for key in POINTS:
+                if normalize_pool_name(key) == norm_pool_name:
+                    points = POINTS[key]
+                    break
 
-            text = f"{medal} {pair_and_yield}\nPool activity: {activity_str}\nTvl: 💲{tvl}"
+            # Compose display with correct separator!
+            text = f"{medal} {display_pool_name} | {yield_part}\nPool activity: {activity_str}\nTvl: 💲{tvl}"
+            if points:
+                text += f"\nPoints 24H: 🎯 {points}"
             markup = types.InlineKeyboardMarkup()
             markup.add(types.InlineKeyboardButton("🌐 Go to the pool", url=url))
             msg = bot.send_message(call.message.chat.id, text, reply_markup=markup)
             track_pool_msg(call.from_user.id, msg.message_id)
             track_user_msg(call.from_user.id, msg.message_id)
+
     elif call.data == 'poolswithpointsUmbra':
-        top = TOP5('')
+        top = get_top5('points-umbra')
         poolsDict = top.topPointsPools('Umbra')
         poolsActivity = top.topPointsPoolsActivity('Umbra')
         tvlData = top.topPointsPooolsTVL('Umbra')
@@ -545,18 +648,19 @@ def handle_poolswithpoints(call):
                     activity_str = 'Low ‼️'
             except:
                 activity_str = str(activity)
-            text = f"{medal} <b>{pair_and_yield}</b>\n<b>Pool activity</b>: {activity_str}\n<b>Tvl</b>: 💲{tvl}"
+            text = f"{medal} <b>{pair_and_yield}</b> (24H)\n<b>Pool activity</b>: {activity_str}\n<b>Tvl</b>: 💲{tvl}"
             markup = types.InlineKeyboardMarkup()
             markup.add(types.InlineKeyboardButton("🌐 Go to the pool", url=url))
             msg = bot.send_message(call.message.chat.id, text, parse_mode="HTML", reply_markup=markup)
             track_pool_msg(call.from_user.id, msg.message_id)
             track_user_msg(call.from_user.id, msg.message_id)
 
+
     
 @bot.callback_query_handler(func=lambda call: call.data in ASSETS)
 def pools_for_asset(call):
     asset = ASSETS[call.data]
-    top = TOP5(asset)
+    top = get_top5(asset)
     bestYield = top.theBestYield()
     if not bestYield:
         msg = bot.send_message(call.message.chat.id, "No pools found for this asset.")
@@ -565,9 +669,21 @@ def pools_for_asset(call):
     poolsActivity = top.poolsActivity()
     tvlData = top.tvlData()
     medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
-    for idx, (pair_and_yield, url) in enumerate(bestYield):
-        activity = poolsActivity.get(pair_and_yield, "N/A")
-        tvl = tvlData.get(pair_and_yield, "N/A")
+    for idx, (pair_and_yield, url) in enumerate(bestYield):  # <-- FIXED LINE
+        # Only support ' | ' as separator!
+        if ' | ' not in pair_and_yield:
+            continue  # skip weird keys
+
+        pool_name, yield_part = pair_and_yield.split(' | ', 1)
+        orig_pair_and_yield = pair_and_yield  # for correct lookups
+
+        # Nucleus pool visual, but KEEP orig_pair_and_yield for lookup!
+        display_pool_name = pool_name
+        if is_nucleus_pool(pool_name):
+            display_pool_name += ' ➕ Nucleus Points 😍'
+
+        activity = poolsActivity.get(orig_pair_and_yield, "N/A")
+        tvl = tvlData.get(orig_pair_and_yield, "N/A")
         medal = medals[idx] if idx < len(medals) else ""
         try:
             a = float(activity)
@@ -580,15 +696,20 @@ def pools_for_asset(call):
         except:
             activity_str = str(activity)
 
-            pool_name = pair_and_yield.split(' : ')[0]
-            if is_nucleus_pool(pool_name):
-                    pool_name += ' ➕ Nucleus Points 😍'
-                    pair_and_yield = pool_name + ' : ' + pair_and_yield.split(' : ')[1]
+        points = None
+        norm_pool_name = normalize_pool_name(pool_name)
+        for key in POINTS:
+            if normalize_pool_name(key) == norm_pool_name:
+                points = POINTS[key]
+                break
 
-        text = f"{medal} <b>{pair_and_yield}</b>\n<b>Pool activity</b>: {activity_str}\n<b>Tvl</b>: 💲{tvl}"
+        # Compose display with correct separator!
+        text = f"{medal} {display_pool_name} | {yield_part}\nPool activity: {activity_str}\nTvl: 💲{tvl}"
+        if points:
+            text += f"\nPoints 24H: 🎯 {points}"
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("🌐 Go to the pool", url=url))
-        msg = bot.send_message(call.message.chat.id, text, parse_mode="HTML", reply_markup=markup)
+        msg = bot.send_message(call.message.chat.id, text, reply_markup=markup)
         track_pool_msg(call.from_user.id, msg.message_id)
         track_user_msg(call.from_user.id, msg.message_id)
 
@@ -691,6 +812,7 @@ def handle_unexpected_message(message):
     )
     track_user_msg(user_id, msg.message_id)
 
+threading.Thread(target=cache_refresher, daemon=True).start()
 bot.polling()
 
 

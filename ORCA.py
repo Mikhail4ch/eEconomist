@@ -19,9 +19,10 @@ TOKEN_ADDRESS = {
 
 class ORCA:
     """Class to fetch and process Orca pool data for a specific asset."""
-
     def __init__(self, symbol):
         self._SYMBOL = symbol.upper()
+
+    def fetch_data(self):
         url = (
             'https://api.orca.so/v2/eclipse/pools'
             '?limit=50&stats=5m,15m,30m,1H,2H,4H,8H,24H,7D,30D'
@@ -32,7 +33,7 @@ class ORCA:
         self._top_pool_keys = []
         self._poolActivity = {}
         self._tvlData = {}
-
+    
     def bestYield24(self):
         results = []
         url_dict = {}
@@ -69,7 +70,7 @@ class ORCA:
                 else:
                     continue
 
-                key = f"{pair_str} : {yld_rounded}％"
+                key = f"{pair_str} | {yld_rounded}％"
                 results.append((key, yld_rounded, pair_str))
                 url_dict[key] = pool_url
 
@@ -93,7 +94,7 @@ class ORCA:
         self._tvlData = {key: tvl_dict[key] for key in self._top_pool_keys}
 
         if not output:
-            return f"No pools found for symbol: {self._SYMBOL}"
+            return {}
         return output
 
     def poolActivities(self):

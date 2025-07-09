@@ -7,7 +7,10 @@ headers = {
 }
 
 class Solar:
-    def __init__(self):
+    def __init__(self, symbol):
+        self._SYMBOL = symbol.upper()
+
+    def fetch_data(self):
         url = 'https://api.solarstudios.co/pools/info/list?poolType=standard&poolSortField=default&sortType=desc&pageSize=100&page=1'
         response = requests.get(url, headers=headers)
         data = json.loads(response.text)
@@ -32,7 +35,7 @@ class Solar:
                 self._poolActivity[key] = activity
                 self._tvlData[key] = int(round(tvl,0))
             elif {'ETH', 'USDC'} == symbols:
-                key = f"ETH/USDC (Solar) : {daily_yield}％"
+                key = f"ETH/USDC (Solar) | {daily_yield}％"
                 result[key] = {pool_url}
                 self._poolActivity[key] = activity
                 self._tvlData[key] = int(round(tvl,0)) 

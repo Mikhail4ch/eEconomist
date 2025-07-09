@@ -31,11 +31,17 @@ ADDRESS_TO_SYMBOL = {v: k for k, v in TOKEN_ADDRESS.items()}
 
 class UMBRA:
     def __init__(self):
-        url = 'https://api.umbra.finance/1/explore/pools?sortBy=totalValueLockedUsd&sortDirection=desc'
-        response = requests.get(url, headers=headers)
-        self._DATA = json.loads(response.text)
+        self._DATA = None
         self._poolActivity = {}
         self._tvlData = {}
+
+    def fetch_data(self):
+        url = 'https://api.umbra.finance/1/explore/pools?sortBy=totalValueLockedUsd&sortDirection=desc'
+        headers = {
+            'user-agent': FakeUserAgent().random
+        }
+        response = requests.get(url, headers=headers)
+        self._DATA = json.loads(response.text)
 
     def topPoolsWithPoints(self):
         result = {}
