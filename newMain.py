@@ -149,7 +149,7 @@ def menu_entry_point(call):
     LAST_MENU_MSG_ID[user_id] = None
 
     # 1. Send menu image (book.png)
-    file = open('./bookaa1.jpg', 'rb')
+    file = open('./bookaa.3.jpg', 'rb')
     photo_msg = bot.send_photo(chat_id, file)
     MENU_IMAGE_ID[user_id] = photo_msg.message_id
     PERMANENT_MSG_IDS.setdefault(user_id, []).append(photo_msg.message_id)
@@ -421,7 +421,7 @@ def handle_bridges_group(call):
         markup.add(types.InlineKeyboardButton("Lets do some hyper-fast 🌉ing", url=url))
         msg = bot.send_message(
             call.message.chat.id,
-            "Although Hyperlane has already held its TGE, they’ll be distributing $HYPER rewards quarterly 😉\n\nTo be eligible you need to <b>spend $3 in Hyperlane fees</b> and the nearest snaphot will be on <b>30th of June ⛱</b>\n\nRoute instance: Solana 🔁 Eclipse (USDC & SOL)",
+            "Although Hyperlane has already held its TGE, they’ll be distributing $HYPER rewards quarterly 😉\n\nTo be eligible you need to <b>spend $3 in Hyperlane fees</b> and the nearest snaphot will be <b>in the end of Q3</b> ish\n\nRoute instance: Solana 🔁 Eclipse (USDC & SOL)",
             parse_mode='html',
             reply_markup=markup
         )
@@ -501,11 +501,13 @@ def handle_DApps_group(call):
         )
         track_user_msg(call.from_user.id, msg.message_id)
     elif call.data == 'umbra':
+        url = 'https://lunarfinance.io/swap'
         markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton('Trade on Lunar Finance 🌒', url=url))
         markup.add(types.InlineKeyboardButton('Pools with points 🃏', callback_data='poolswithpointsUmbra'))
         msg = bot.send_message(
             call.message.chat.id,
-            "<em>Add liquidity</em> to earn <strong>Umbra Points</strong> instead of fees + earn extra points based on <em>swap volume</em> 🧪\n\nNote: Epoch 7 has ended, so point distribution is <b>currently paused</b>. However, you can still complete retroactive activities, as they <b>may be rewarded</b> in the future ⛏️",
+            "1) Umbra x Lunar Finance just launched a 4-week <b>Nitro Rush campaign</b> 🏎🔥\n\nEarn <b>Nitro XP</b> simply by trading on Lunar Finance and selecting Umbra as your route 🛣\n Nitro XP will be converted to <b>veUMBRA</b> at TGE 🪂 \n\n2) <em>Add liquidity</em> to earn <strong>Umbra Points</strong> instead of fees + earn extra points based on <em>swap volume</em> 🧪\n\nNote: Epoch 7 has ended, so points distribution for activites above is <b>currently paused</b> ⏸️",
             parse_mode='html',
             reply_markup=markup
         )
@@ -704,7 +706,7 @@ def pools_for_asset(call):
                 break
 
         # Compose display with correct separator!
-        text = f"{medal} {display_pool_name} | {yield_part}\nPool activity: {activity_str}\nTvl: 💲{tvl}"
+        text = f"{medal} {display_pool_name} | {yield_part} (24H)\nPool activity: {activity_str}\nTvl: 💲{tvl}"
         if points:
             text += f"\nPoints 24H: 🎯 {points}"
         markup = types.InlineKeyboardMarkup()

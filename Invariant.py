@@ -12,7 +12,7 @@ TOKEN_ADDRESS = {
     'USDT': 'CEBP3CqAbW4zdZA57H2wfaSG1QNdzQ72GiQEbQXyW9Tm',
     'USDC': 'AKEWE7Bgh87GPp171b4cJPSSZfmZwQ3KaqYqXoKLNAEE',
     'BITZ': '64mggk2nXg6vHC1qCdsZdEFzd5QGN4id54Vbho4PswCF',
-    'tETH': 'GU7NS9xCwgNPiAdJ69iusFrRfawjDDPjeMBovhV1d4kn',
+    'TETH': 'GU7NS9xCwgNPiAdJ69iusFrRfawjDDPjeMBovhV1d4kn',
     'TUSD': '27Kkn8PWJbKJsRZrxbsYDdedpUQKnJ5vNfserCxNEJ3R',
     'LAIKA': 'LaihKXA47apnS599tyEyasY2REfEzBNe4heunANhsMx',
     'SBITZ': 'sBTZcSwRZhRq3JcjFh1xwxgCxmsN7MreyU3Zx8dA8uF',
@@ -120,7 +120,7 @@ class INVARIANT:
                 continue
 
             apy = float(pool.get('apy', 0))
-            daily_apr = round(apy / 365, 4)
+            daily_apr = round(apy / 365, 3)
             fee = float(pool.get('fee'))
             fee_str = f"{fee:.2f}".replace('.', '_')
             volume = float(pool.get('volume', 0))
