@@ -52,6 +52,10 @@ POINTS = {
 
 SUBSCRIBERS_PER_GROUP = {}  # {group_id: set(user_ids)}
 
+def pool_key(pool_string):
+    # extract just the pool part, without APR
+    return pool_string.split(' | ')[0].strip()
+
 def notify_markup(user_id, group_id):
     markup = types.InlineKeyboardMarkup()
     if user_id in SUBSCRIBERS_PER_GROUP.get(group_id, set()):
@@ -64,6 +68,12 @@ def extract_pool_name(full_key):
     # Extracts "PAIR (DEX)" from "PAIR (DEX) | X.XXX％"
     return full_key.split(' | ')[0].strip()
 
+@bot.callback_query_handler(func=lambda call: call.data.startswith("remove_notification:"))
+def remove_notification(call):
+    try:
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+    except Exception:
+        pass
 
 def track_pool_msg(user_id, msg_id):
     POOL_MSG_IDS.setdefault(user_id, []).append(msg_id)
@@ -74,24 +84,24 @@ def normalize_pool_name(name):
 def maybe_notify_group(group_id, current_top5):
     global LAST_TOP5_PER_GROUP
     prev_top5 = LAST_TOP5_PER_GROUP.get(group_id)
-    if prev_top5 is not None and current_top5 != prev_top5:
-        # Compute differences
-        prev_set = set(prev_top5)
-        curr_set = set(current_top5)
 
-        added = [p for p in current_top5 if p not in prev_set]
-        removed = [p for p in prev_top5 if p not in curr_set]
+    curr_keys = [pool_key(p) for p in current_top5]
+    prev_keys = [pool_key(p) for p in prev_top5] if prev_top5 else []
 
+    if prev_top5 is not None and curr_keys != prev_keys:
+        prev_set = set(prev_keys)
+        curr_set = set(curr_keys)
+
+        added = [current_top5[i] for i, k in enumerate(curr_keys) if k not in prev_set]
+        removed = [prev_top5[i] for i, k in enumerate(prev_keys) if k not in curr_set]
         moved = []
-        for p in curr_set & prev_set:
-            old_idx = prev_top5.index(p)
-            new_idx = current_top5.index(p)
+        for k in curr_set & prev_set:
+            old_idx = prev_keys.index(k)
+            new_idx = curr_keys.index(k)
             if old_idx != new_idx:
-                moved.append((p, old_idx + 1, new_idx + 1))  # 1-based index
+                moved.append((current_top5[new_idx], old_idx + 1, new_idx + 1))
 
-        # Format notification message
         msg_lines = [f"🔔 <b>The Top 5 for {group_id.replace('top5_', '').upper()} has changed!</b>\n"]
-
         if added:
             msg_lines.append("🆕 <b>New pools entered:</b>")
             for pool in added:
@@ -107,18 +117,22 @@ def maybe_notify_group(group_id, current_top5):
 
         msg_lines.append("\nCheck the latest Top 5 in the bot! 🏊‍♂️")
 
-        # Notify all subscribers
+        # Add Remove button
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("❌ Remove", callback_data=f"remove_notification:{group_id}"))
+
         user_ids = SUBSCRIBERS_PER_GROUP.get(group_id, set())
         for user_id in user_ids:
             try:
                 bot.send_message(
                     user_id,
                     "\n".join(msg_lines),
-                    parse_mode='HTML'
+                    parse_mode='HTML',
+                    reply_markup=markup
                 )
             except Exception as e:
                 print(f"Failed to notify {user_id}: {e}")
-    # Update last known state
+
     LAST_TOP5_PER_GROUP[group_id] = current_top5
 
 def get_top5(symbol):
