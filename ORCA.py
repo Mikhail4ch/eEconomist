@@ -101,6 +101,61 @@ class ORCA:
         return self._poolActivity
     def tvlData(self):
         return self._tvlData
+    def top5_pools_by_apy(self):
+        if not hasattr(self, '_DATA'):
+            self.fetch_data()
+
+        pool_list = []
+        for asset in self._DATA:
+            try:
+                tvl = float(asset.get('tvlUsdc', 0))
+                if tvl < 1000:
+                    continue
+
+                yld = float(asset['stats']['24h']['yieldOverTvl']) * 100
+                yld_rounded = round(yld, 3)
+                tokenA = asset['tokenA']
+                tokenB = asset['tokenB']
+                symbolA = tokenA['symbol'].upper()
+                symbolB = tokenB['symbol'].upper()
+                addressA = tokenA['address']
+                addressB = tokenB['address']
+
+                # Standardize pair string and URL format
+                pair = f"{symbolA}/{symbolB} (Orca)"
+                url = (
+                    f"https://www.orca.so/pools?chainId=eclipse"
+                    f"&tokens={addressA}&tokens={addressB}"
+                )
+                pool_list.append((yld, pair, url))
+            except Exception:
+                continue
+
+        # Sort and take top 5 by APY
+        top5 = sorted(pool_list, key=lambda x: x[0], reverse=True)[:5]
+
+        # Return in requested format
+        result = {f"{pair} | {round(apy, 3)}％": url for apy, pair, url in top5}
+        return result
+    def tvl_and_activity_for_top5(self):
+        # Map: { "PAIR | YIELD％": (TVL, Activity) }
+        result = {}
+        for asset in self._DATA:
+            try:
+                tvl = float(asset.get('tvlUsdc', 0))
+                if tvl < 1000:
+                    continue
+                yld = float(asset['stats']['24h']['yieldOverTvl']) * 100
+                symbolA = asset['tokenA']['symbol'].upper()
+                symbolB = asset['tokenB']['symbol'].upper()
+                pair = f"{symbolA}/{symbolB} (Orca)"
+                key = f"{pair} | {round(yld, 3)}％"
+                volume = float(asset['stats']['24h'].get('volume', 0))
+                activity = round(volume / tvl, 4) if tvl else 0
+                result[key] = (int(round(tvl,0)), activity)
+            except Exception:
+                continue
+        return result
 
 
 

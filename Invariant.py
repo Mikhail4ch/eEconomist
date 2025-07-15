@@ -16,7 +16,8 @@ TOKEN_ADDRESS = {
     'TUSD': '27Kkn8PWJbKJsRZrxbsYDdedpUQKnJ5vNfserCxNEJ3R',
     'LAIKA': 'LaihKXA47apnS599tyEyasY2REfEzBNe4heunANhsMx',
     'SBITZ': 'sBTZcSwRZhRq3JcjFh1xwxgCxmsN7MreyU3Zx8dA8uF',
-    'MCT': '82kkga2kBcQNyV4VKJhGvE7Z58fFavVyuh5NapMVo7Qs'
+    'MCT': '82kkga2kBcQNyV4VKJhGvE7Z58fFavVyuh5NapMVo7Qs',
+    'ES': 'GnBAskb2SQjrLgpTjtgatz4hEugUsYV7XrWU1idV3oqW'
 }
 
 POOLS_WITH_POINTS = {
@@ -140,6 +141,67 @@ class INVARIANT:
         return self._poolWithPoActivity 
     def poolsWithPointsTVL(self):
         return self._poolWithPotvlData
+    def top5_pools_by_apy(self):
+        # Make sure you have fresh data
+        if not hasattr(self, '_DATA'):
+            self.fetch_data()
+
+        pools = self._DATA.get('poolsData', [])
+        pool_list = []
+        for pool in pools:
+            try:
+                tvl = float(pool.get('tvl', 0))
+                if tvl < 1000:
+                    continue
+
+                apy = float(pool.get('apy', 0))
+                daily_apr = round(apy / 365, 3)
+                symbolX = ADDRESS_TO_SYMBOL.get(pool.get('tokenX'), pool.get('tokenX'))
+                symbolY = ADDRESS_TO_SYMBOL.get(pool.get('tokenY'), pool.get('tokenY'))
+                fee = float(pool.get('fee', 0))
+                fee_str = f"{fee:.2f}".replace('.', '_')
+
+                # To ensure correct direction for url
+                url = f"https://eclipse.invariant.app/newPosition/{symbolX}/{symbolY}/{fee_str}"
+
+                pair = f"{symbolX}/{symbolY} (Invariant)"
+                pool_list.append((daily_apr, pair, url))
+            except Exception:
+                continue
+
+        # Sort by APY descending
+        top5 = sorted(pool_list, key=lambda x: x[0], reverse=True)[:5]
+
+        # Prepare output dictionary
+        result = {f"{pair} | {round(apy, 3)}％": url for apy, pair, url in top5}
+
+        return result
+    
+    def tvl_and_activity_for_top5(self):
+        # Map: { "PAIR | YIELD％": (TVL, Activity) }
+        pools = self._DATA.get('poolsData', [])
+        result = {}
+        for pool in pools:
+            try:
+                tvl = float(pool.get('tvl', 0))
+                if tvl < 1000:
+                    continue
+
+                apy = float(pool.get('apy', 0))
+                daily_apr = round(apy / 365, 3)
+                symbolX = ADDRESS_TO_SYMBOL.get(pool.get('tokenX'), pool.get('tokenX'))
+                symbolY = ADDRESS_TO_SYMBOL.get(pool.get('tokenY'), pool.get('tokenY'))
+                fee = float(pool.get('fee', 0))
+                fee_str = f"{fee:.2f}".replace('.', '_')
+                pair = f"{symbolX}/{symbolY} (Invariant)"
+                key = f"{pair} | {round(daily_apr, 3)}％"
+
+                volume = float(pool.get('volume', 0))
+                activity = round(volume / tvl, 4) if tvl else 0
+                result[key] = (int(round(tvl,0)), activity)
+            except Exception:
+                continue
+        return result
 
 
 

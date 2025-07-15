@@ -117,6 +117,42 @@ class TOP5:
             reverse=True
         )
         return dict(sorted_items)
+    
+    def top5_pools_by_apy(self):
+        self._ORCA.fetch_data()
+        self._Invariant.fetch_data()
+        self._Solar.fetch_data()
+        orca_top = self._ORCA.top5_pools_by_apy()
+        invariant_top = self._Invariant.top5_pools_by_apy()
+        solar_top = self._Solar.bestYield24()
+        all_entries = []
+        for d in [orca_top, invariant_top, solar_top]:
+            for k, url in d.items():
+                match = re.search(r'[|]\s*([\d.]+)[%％]', k)
+                apy = float(match.group(1)) if match else 0
+                all_entries.append((k, apy, url))
+        top5 = sorted(all_entries, key=lambda x: x[1], reverse=True)[:5]
+        self._top5_keys = [k for k, _, _ in top5]  # <-- FIXED
+        return [(k, url) for k, _, url in top5]
+    
+    def tvl_activity_for_overall(self):
+        """Return a dict mapping pool keys to (tvl, activity) for the current top 5."""
+        # Gather tvl+activity data from DEXes
+        dex_maps = []
+        # Only query those DEXes you use in 'overall'
+        for dex in [self._ORCA, self._Invariant, self._Solar, self._Umbra]:
+            if hasattr(dex, 'tvl_and_activity_for_top5'):
+                try:
+                    dex_maps.append(dex.tvl_and_activity_for_top5())
+                except Exception:
+                    continue
+        # Merge all maps
+        merged = {}
+        for d in dex_maps:
+            merged.update(d)
+        # Only return results for current self._top5_keys (populated by top5_pools_by_apy)
+        keys = getattr(self, '_top5_keys', [])
+        return {k: merged.get(k, ("N/A", "N/A")) for k in keys}
 
 
     

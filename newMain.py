@@ -24,6 +24,7 @@ HOLDING_STATE = set()
 STICKY_MSG_ID = {}
 LAST_MENU_MSG_ID = {}
 POOL_MSG_IDS = {} 
+LAST_TOP5_PER_GROUP = {}
 
 ASSETS = {
     '$BITZ ⛏️': 'BITZ',
@@ -34,7 +35,8 @@ ASSETS = {
     '$USDC 💵': 'USDC',
     '$USDT 💵': 'USDT',
     '$SOL 🚀': 'SOL',
-    '$LAIKA 🐶': 'LAIKA'
+    '$LAIKA 🐶': 'LAIKA',
+    '$ES 👑': 'ES'
 }
 
 POINTS = {
@@ -48,11 +50,76 @@ POINTS = {
 }
 
 
+SUBSCRIBERS_PER_GROUP = {}  # {group_id: set(user_ids)}
+
+def notify_markup(user_id, group_id):
+    markup = types.InlineKeyboardMarkup()
+    if user_id in SUBSCRIBERS_PER_GROUP.get(group_id, set()):
+        markup.add(types.InlineKeyboardButton("🔕 Unsubscribe", callback_data=f"unsubscribe_group:{group_id}"))
+    else:
+        markup.add(types.InlineKeyboardButton("🔔 Notify me of changes in this top", callback_data=f"notify_group:{group_id}"))
+    return markup
+
+def extract_pool_name(full_key):
+    # Extracts "PAIR (DEX)" from "PAIR (DEX) | X.XXX％"
+    return full_key.split(' | ')[0].strip()
+
+
 def track_pool_msg(user_id, msg_id):
     POOL_MSG_IDS.setdefault(user_id, []).append(msg_id)
 
 def normalize_pool_name(name):
     return name.replace(' (Invariant)', '').strip().upper()
+
+def maybe_notify_group(group_id, current_top5):
+    global LAST_TOP5_PER_GROUP
+    prev_top5 = LAST_TOP5_PER_GROUP.get(group_id)
+    if prev_top5 is not None and current_top5 != prev_top5:
+        # Compute differences
+        prev_set = set(prev_top5)
+        curr_set = set(current_top5)
+
+        added = [p for p in current_top5 if p not in prev_set]
+        removed = [p for p in prev_top5 if p not in curr_set]
+
+        moved = []
+        for p in curr_set & prev_set:
+            old_idx = prev_top5.index(p)
+            new_idx = current_top5.index(p)
+            if old_idx != new_idx:
+                moved.append((p, old_idx + 1, new_idx + 1))  # 1-based index
+
+        # Format notification message
+        msg_lines = [f"🔔 <b>The Top 5 for {group_id.replace('top5_', '').upper()} has changed!</b>\n"]
+
+        if added:
+            msg_lines.append("🆕 <b>New pools entered:</b>")
+            for pool in added:
+                msg_lines.append(f"  • {pool}")
+        if removed:
+            msg_lines.append("❌ <b>Pools removed:</b>")
+            for pool in removed:
+                msg_lines.append(f"  • {pool}")
+        if moved:
+            msg_lines.append("🔄 <b>Pools changed position:</b>")
+            for pool, old_pos, new_pos in moved:
+                msg_lines.append(f"  • {pool}: {old_pos} → {new_pos}")
+
+        msg_lines.append("\nCheck the latest Top 5 in the bot! 🏊‍♂️")
+
+        # Notify all subscribers
+        user_ids = SUBSCRIBERS_PER_GROUP.get(group_id, set())
+        for user_id in user_ids:
+            try:
+                bot.send_message(
+                    user_id,
+                    "\n".join(msg_lines),
+                    parse_mode='HTML'
+                )
+            except Exception as e:
+                print(f"Failed to notify {user_id}: {e}")
+    # Update last known state
+    LAST_TOP5_PER_GROUP[group_id] = current_top5
 
 def get_top5(symbol):
     now = time.time()
@@ -72,6 +139,18 @@ def cache_refresher():
                 top = TOP5(symbol)
                 top.fetch_all()
                 TOP5_CACHE[symbol] = {'obj': top, 'time': time.time()}
+
+                # Check for top5 changes for each group
+                # Overall
+                if symbol == '':
+                    group_id = "top5_overall"
+                    current_top5 = [k for k, v in top.top5_pools_by_apy()]
+                    maybe_notify_group(group_id, current_top5)
+                # For each asset
+                else:
+                    group_id = f"top5_{symbol.upper()}"
+                    current_top5 = [k for k, v in top.theBestYield()]
+                    maybe_notify_group(group_id, current_top5)
         time.sleep(CACHE_TTL)
 
 def is_nucleus_pool(pool_name):
@@ -156,12 +235,17 @@ def menu_entry_point(call):
 
     # 2. Send menu message with keyboard
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton('Pools with highest yield 🏆 in 24H 🕔', callback_data='yield'))
-    markup.add(types.InlineKeyboardButton('$BITZ staking performance 🥩', callback_data='bitz'))
-    markup.add(types.InlineKeyboardButton('$sBITZ holding performance 💧', callback_data='sbitz'))
-    markup.add(types.InlineKeyboardButton('Cross-chain opportunities 🤞⛓️', callback_data='crosschain'))
-    markup.add(types.InlineKeyboardButton('Retroactive points 🪂', callback_data='points'))
-    markup.add(types.InlineKeyboardButton('GameFi 🎮 & 💰', callback_data='gamefi'))
+    button1 = types.InlineKeyboardButton('Juiciest 🧃 liquidity pools 🏊🏻‍♂️', callback_data='yield')
+    markup.row(button1)
+    button2 =types.InlineKeyboardButton('$BITZ staking performance 🥩', callback_data='bitz')
+    button3 =types.InlineKeyboardButton('$sBITZ HODL performance 💧', callback_data='sbitz')
+    markup.row(button2,button3)
+    button4 =types.InlineKeyboardButton('Cross-chain opportunities 🤞⛓️', callback_data='crosschain')
+    button5 =types.InlineKeyboardButton('Retroactive points 🪂', callback_data='points')
+    markup.row(button4,button5)
+    button6 =types.InlineKeyboardButton('GameFi 🎮 & 💰', callback_data='gamefi')
+    button7 =types.InlineKeyboardButton('NFTs 🖼', callback_data='nfts')
+    markup.row(button6,button7)
     menu_msg = bot.send_message(
         chat_id,
         '<b>Table of contents</b> 📜',
@@ -245,15 +329,14 @@ def handle_back_button(message):
     except Exception:
         pass
 
-
 # ---- Menu Handlers for yield/other_chapters ----
 
-@bot.callback_query_handler(func=lambda call: call.data in ['yield', 'points', 'crosschain','gamefi','bitz', 'sbitz'])
+@bot.callback_query_handler(func=lambda call: call.data in ['yield', 'points', 'crosschain','gamefi','bitz', 'sbitz', 'nfts'])
 def handle_menu(call):
     if call.data == 'yield':
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton('eEconomy pillars 🏛: $BITZ, $tETH, $ES and etc.', callback_data='pillars'))
-        markup.add(types.InlineKeyboardButton('Other assets 📊: $ETH, $USDC, $SOL and etc.', callback_data='other_assets'))
+        markup.add(types.InlineKeyboardButton('Juciest pools 👉 overall', callback_data='overall'))
+        markup.add(types.InlineKeyboardButton('Juciest pools 👉 for particular asset', callback_data='particular'))
         msg = bot.send_message(call.message.chat.id, "Choose pool group fam 🤔", reply_markup=markup)
         track_user_msg(call.from_user.id, msg.message_id)
     elif call.data == 'points':
@@ -294,6 +377,24 @@ def handle_menu(call):
         markup.add(types.InlineKeyboardButton('Doiq 🏆', callback_data='doiq'))
         msg = bot.send_message(call.message.chat.id,"Have fun and compete for the <b>real rewards</b> 💰 with eGaming on <strong>Eclipse</strong> 💫", parse_mode='html', reply_markup=markup)
         track_user_msg(call.from_user.id, msg.message_id)
+    elif call.data == 'nfts':
+        markup = types.InlineKeyboardMarkup()
+        button = types.InlineKeyboardButton('👑 ASC 👑', callback_data='asc')
+        markup.row(button)
+        button1 = types.InlineKeyboardButton('🥇 Validators', callback_data='validators')
+        button2 = types.InlineKeyboardButton('🥈 E-Lander', callback_data='elander')
+        markup.row(button1,button2)
+        button3 = types.InlineKeyboardButton('🥉 Celestial Mammoth', callback_data='celestial')
+        button4 = types.InlineKeyboardButton('🥉 Eclipse Bulls Club', callback_data='ebc')
+        markup.row(button3,button4)
+        button5 = types.InlineKeyboardButton('🥉 Sunborn', callback_data='sunborn')
+        button6 = types.InlineKeyboardButton('🥉 Moon Odyssey Club', callback_data='moc')
+        markup.row(button5,button6)
+        button7 = types.InlineKeyboardButton('🥉 NeuroGuardians', callback_data='neuroGuardians')
+        button8 = types.InlineKeyboardButton('🥉 Solar Companions', callback_data='sc')
+        markup.row(button7,button8)
+        msg = bot.send_message(call.message.chat.id,"Here is <b>my current top</b> NFT collections on Eclipse 🌃\n\nSome already offer <em>utilities and ecosystem bonuses</em>, while others might in the future. Remember, NFTs are <b>highly volatile</b> and risky - <em>read each description</em> carefully and <b>DYOR</b> 🕵️‍♀️", parse_mode='html', reply_markup=markup)
+        track_user_msg(call.from_user.id, msg.message_id)
     else:
         msg = bot.send_message(call.message.chat.id, "Coming tho0on!")
         track_user_msg(call.from_user.id, msg.message_id)
@@ -301,6 +402,79 @@ def handle_menu(call):
 @bot.callback_query_handler(func=lambda call: call.data == 'disabled')
 def disabled_callback(call):
     bot.answer_callback_query(call.id, "Coming soon 🚧", show_alert=False)
+
+@bot.callback_query_handler(func=lambda call: call.data in ['particular', 'overall'])
+def handle_juciestpools(call):
+    if call.data == 'particular':
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton('eEconomy pillars 🏛: $ES, $BITZ and etc.', callback_data='pillars'))
+        markup.add(types.InlineKeyboardButton('Other assets 📊: $ETH, $SOL and etc.', callback_data='other_assets'))
+        msg = bot.send_message(call.message.chat.id, "Choose pool group fam 🤔", reply_markup=markup)
+        track_user_msg(call.from_user.id, msg.message_id)
+
+    elif call.data == 'overall':
+        top = get_top5('')
+        bestYield = top.top5_pools_by_apy()
+        if not bestYield:
+            msg = bot.send_message(call.message.chat.id, "No juicy pools found across all DEXes.")
+            track_user_msg(call.from_user.id, msg.message_id)
+            return
+
+        # Use the smart TVL/activity map from the updated TOP5!
+        tvl_activity_map = top.tvl_activity_for_overall()
+
+        tvl_activity_by_pool = {}
+        for k, v in tvl_activity_map.items():
+            base_pool = extract_pool_name(k)
+            tvl_activity_by_pool[base_pool] = v
+
+        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
+        for idx, (pair_and_yield, url) in enumerate(bestYield):
+            if ' | ' not in pair_and_yield:
+                continue
+
+            pool_name, yield_part = pair_and_yield.split(' | ', 1)
+
+            display_pool_name = pool_name
+            tvl, activity = tvl_activity_by_pool.get(display_pool_name, ("N/A", "N/A"))
+
+            medal = medals[idx] if idx < len(medals) else ""
+            try:
+                a = float(activity)
+                if a > 0.2:
+                    activity_str = 'High ✅'
+                elif a > 0.05:
+                    activity_str = 'Moderate ⚠️'
+                else:
+                    activity_str = 'Low ‼️'
+            except:
+                activity_str = str(activity)
+
+            points = None
+            norm_pool_name = normalize_pool_name(pool_name)
+            for key in POINTS:
+                if normalize_pool_name(key) == norm_pool_name:
+                    points = POINTS[key]
+                    break
+
+            text = f"{medal} {display_pool_name} | {yield_part} (24H)\nPool activity: {activity_str}\nTvl: 💲{tvl}"
+            if points:
+                text += f"\nPoints 24H: 🎯 {points}"
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton("🌐 Go to the pool", url=url))
+            msg = bot.send_message(call.message.chat.id, text, reply_markup=markup)
+            track_pool_msg(call.from_user.id, msg.message_id)
+            track_user_msg(call.from_user.id, msg.message_id)
+        group_id = "top5_overall"  # Or e.g. f"top5_{asset}"
+        markup = notify_markup(call.from_user.id, group_id)
+        msg = bot.send_message(call.message.chat.id,
+            "Want instant alerts when this top changes? Click the bell ⤵️",
+            reply_markup=markup
+        )
+        track_user_msg(call.from_user.id, msg.message_id)
+        track_pool_msg(call.from_user.id, msg.message_id)
+
+
 
 @bot.callback_query_handler(func=lambda call: call.data in ['stacking', 'earning'])
 def handle_bitz(call):
@@ -390,9 +564,14 @@ def get_potentialHoldings(message):
 def handle_asset_group(call):
     if call.data == 'pillars':
         markup = types.InlineKeyboardMarkup()
-        for key in ['$BITZ ⛏️', '$sBITZ 💧', '$tUSD 💵', '$tETH 💎']:
-            markup.add(types.InlineKeyboardButton(key, callback_data=key))
-        markup.add(types.InlineKeyboardButton('$ES 🎇 (tho0on)', callback_data='disabled'))
+        button1 = types.InlineKeyboardButton("$ES 👑", callback_data="$ES 👑")
+        markup.row(button1)
+        button2 = types.InlineKeyboardButton("$BITZ ⛏️", callback_data="$BITZ ⛏️")
+        button3 = types.InlineKeyboardButton("$sBITZ 💧", callback_data="$sBITZ 💧")
+        markup.row(button2,button3)
+        button4 = types.InlineKeyboardButton("$tUSD 💵", callback_data="$tUSD 💵")
+        button5 = types.InlineKeyboardButton("$tETH 💎", callback_data="$tETH 💎")
+        markup.row(button4,button5)
         msg = bot.send_message(
             call.message.chat.id,
             "Choose one asset you want to earn with as a smart eEconomist 😉",
@@ -400,12 +579,16 @@ def handle_asset_group(call):
         )
         track_user_msg(call.from_user.id, msg.message_id)
 
-    #elif call.data == 'sBITZ'
-
     elif call.data == 'other_assets':
         markup = types.InlineKeyboardMarkup()
-        for key in ['$ETH 💎', '$USDC 💵', '$USDT 💵', '$SOL 🚀', '$LAIKA 🐶']:
-            markup.add(types.InlineKeyboardButton(key, callback_data=key))
+        button1 = types.InlineKeyboardButton("$ETH 💎", callback_data="$ETH 💎")
+        markup.row(button1)
+        button2 = types.InlineKeyboardButton("$USDC 💵", callback_data="$USDC 💵")
+        button3 = types.InlineKeyboardButton("$USDT 💵", callback_data="$USDT 💵")
+        markup.row(button2,button3)
+        button4 = types.InlineKeyboardButton("$SOL 🚀", callback_data="$SOL 🚀")
+        button5 = types.InlineKeyboardButton("$LAIKA 🐶", callback_data="$LAIKA 🐶")
+        markup.row(button4,button5)
         msg = bot.send_message(
             call.message.chat.id,
             "Choose one asset you want to earn with as a smart eEconomist 😉",
@@ -450,7 +633,6 @@ def handle_bridges_group(call):
         track_user_msg(call.from_user.id, msg.message_id)
 
 
-
 @bot.callback_query_handler(func=lambda call: call.data in ['werm', 'cryptara', 'doiq'])
 def handle_games_group(call):
     if call.data == 'werm':
@@ -487,6 +669,109 @@ def handle_games_group(call):
         )
         track_user_msg(call.from_user.id, msg.message_id)
 
+
+
+@bot.callback_query_handler(func=lambda call: call.data in ['asc', 'validators', 'elander','celestial','ebc','sunborn','moc','neuroGuardians','sc'])
+def handle_games_group(call):
+    if call.data == 'asc':
+        markup = types.InlineKeyboardMarkup()
+        url = 'https://afterschoolclub.xyz/'
+        markup.add(types.InlineKeyboardButton("Head over ASC 🌐", url=url))
+        msg = bot.send_message(
+            call.message.chat.id,
+            "ASC is literally the <b>Official Genesis NFT Collection of Eclipse</b>\n\nWithin the Eclipse economy, it serves both as an <b>identity layer and a luxury item</b>. The fact that some people rock fake ASC PFP speaks volumes 😉\n\nASC holders always enjoy exclusive <b>bonuses and privileges</b> across ecosystem projects - including <em>WLs (cross-chain too), early access, extra points, and multipliers</em> 🎇\n\nIf wanna be a true Eclipse-maxi, grabbing an ASC should be your #1 priority 💯",
+            parse_mode='html',
+            reply_markup=markup
+        )
+        track_user_msg(call.from_user.id, msg.message_id)
+    elif call.data == 'validators':
+        markup = types.InlineKeyboardMarkup()
+        url = 'https://linktr.ee/validators'
+        markup.add(types.InlineKeyboardButton("Head over Validators 🌐", url=url))
+        msg = bot.send_message(
+            call.message.chat.id,
+            "Validators is <b>the first NFT collection on Eclipse</b> SVM, and first across Solana, Ethereum, Celestia 🚀\n\nImo this is the second largest, most influential and most popular collection on Eclipse 🔥 Validators holders recieve <b>a lot of bonuses</b> across Eclipse ecosystem like <em>WLs, extra points, and multipliers</em> 🎯\n\nIf you <em>believe in something,</em> then holding Validators is a must - you cant afford to skip it 🛸",
+            parse_mode='html',
+            reply_markup=markup
+        )
+        track_user_msg(call.from_user.id, msg.message_id)
+    elif call.data == 'elander':
+        markup = types.InlineKeyboardMarkup()
+        url = 'https://e-lander.xyz/'
+        markup.add(types.InlineKeyboardButton("Head over eLander 🌐", url=url))
+        msg = bot.send_message(
+            call.message.chat.id,
+            "E-Lander gives you access to a private DeFi community where people share alpha (insights), find the best strategies to <b>earn, and grow</b> together 🍃\n\nOwning an E-Lander NFT is more than just joining a group - it gives you <em>real benefits inside the EnsoFi ecosystem</em>\n\nAs a holder <b>you will get</b>: exclusive airdrops, point boosts, fee discounts and access to earning vaults\n\nAs EnsoFi grows, E-Lander holders will continue to unlock <em>more features, special rewards, and possibly take part in future governance</em> - bullish 📈",
+            parse_mode='html',
+            reply_markup=markup
+        )
+        track_user_msg(call.from_user.id, msg.message_id)
+    elif call.data == 'celestial':
+        markup = types.InlineKeyboardMarkup()
+        url = 'https://linktr.ee/celestialmmammoth'
+        markup.add(types.InlineKeyboardButton("Celestial 🌐", url=url))
+        msg = bot.send_message(
+            call.message.chat.id,
+            "CelestialMammoth is the <b>Genesis NFT Collection</b> within CELESTIAL ecosystem on Eclipse 😎\n\nIt grants membership to an <b>exclusive community</b>, offering <b>bonuses</b> like <em>WLs, points, and multipliers</em> from partners such as Invariant, Umbra, and more 🤝",
+            parse_mode='html',
+            reply_markup=markup
+        )
+        track_user_msg(call.from_user.id, msg.message_id)
+    elif call.data == 'ebc':
+        markup = types.InlineKeyboardMarkup()
+        url = 'https://x.com/ebclubnft'
+        markup.add(types.InlineKeyboardButton("Head over ECB X 🌐", url=url))
+        msg = bot.send_message(
+            call.message.chat.id,
+            "EBC is a collection of bulls that live at the intersection of two universes on the Eclipse 🪐\n\nThis collection is a quite popular within eCommunity, there are many top Gs among its holders. Nowadays bulls remain active as well as promising 🤞\n\nRecently they partnered with Turbo Girl, so the bulls holders can receive <b>a boost</b> in the Proof of Love campaign 💋",
+            parse_mode='html',
+            reply_markup=markup
+        )
+        track_user_msg(call.from_user.id, msg.message_id)
+    elif call.data == 'sunborn':
+        markup = types.InlineKeyboardMarkup()
+        url = 'https://x.com/sunborn_art'
+        markup.add(types.InlineKeyboardButton("Head over Sunborn X 🌐", url=url))
+        msg = bot.send_message(
+            call.message.chat.id,
+            "Sunborn is the vibrant  <b>art cult</b> on Eclipse 🎨\n\nThey host frequent Discord events, including painting competitions where artists can earn both <b>recognition and cash prizes</b> 💰\n\nSunborn also collaborates with other ecosystem projects. A recent highlight is the Turbo Girl partnership, where Sunborn holders receive <b>a boost</b> in the Proof of Love campaign 💋",
+            parse_mode='html',
+            reply_markup=markup
+        )
+        track_user_msg(call.from_user.id, msg.message_id)
+    elif call.data == 'moc':
+        markup = types.InlineKeyboardMarkup()
+        url = 'https://x.com/Moonlaunchfun'
+        markup.add(types.InlineKeyboardButton("Head over MoonLaunch X 🌐", url=url))
+        msg = bot.send_message(
+            call.message.chat.id,
+            "Moon Odyssey Club is an pixel-style PFP collection of moon-inspired characters from MoonLaunch - a platform where anyone can create their own token 🌘\n\nThe collection has been inactive for quite some time, mirroring MoonLaunch itself, which has resulted in a very low floor price rn 📉\n\nHowever, there is still potential for a strong comeback, thanks to an ongoing collaboration with the AllDomains project and the chance to earn extra <b>AllDomains points</b> by holding MOC 🐵",
+            parse_mode='html',
+            reply_markup=markup
+        )
+        track_user_msg(call.from_user.id, msg.message_id)
+    elif call.data == 'neuroGuardians':
+        markup = types.InlineKeyboardMarkup()
+        url = 'https://x.com/NeuroGuardians'
+        markup.add(types.InlineKeyboardButton("Head over NeuroGuardians X 🌐", url=url))
+        msg = bot.send_message(
+            call.message.chat.id,
+            "NeuroGuardians is a collection of 888 unique characters that players can use in NeuroGuardians game 🎮\n\nThis NFT offers great benefits for gamers, including unique characters and boosts that help climb the leaderboard and earn juicy rewards 😋\n\nEarly minters have already more than paid off, and with the collection currently at a low, the upside potential is huge. Plus, it features ecosystem collaborations and a cross-chain partnership with MegaETH 🥕",
+            parse_mode='html',
+            reply_markup=markup
+        ) 
+        track_user_msg(call.from_user.id, msg.message_id)
+    elif call.data == 'sc':
+        markup = types.InlineKeyboardMarkup()
+        url = 'https://linktr.ee/solardexofficial'
+        markup.add(types.InlineKeyboardButton("Head over Solar Dex🌐", url=url))
+        msg = bot.send_message(
+            call.message.chat.id,
+            "Solar Companions is an NFT collection centered around the upcoming Solar Companion Mobile App 📱\n\nHolders can expect future bonuses and utilities on the platform. Recently, Solar Studios has become noticeably more active - great news for current holders and a strong signal for those yet to grab one 💡\n\nWith recent activities and collaborations across Solana and Aurora ecosystems, the collection looks very promising rn ⚖️",
+            parse_mode='html',
+            reply_markup=markup
+        )    
+        track_user_msg(call.from_user.id, msg.message_id)
 
 @bot.callback_query_handler(func=lambda call: call.data in ['invariant', 'umbra', 'astrol', 'alldomains', 'ensofi', 'deserialize','turbogirl'])
 def handle_DApps_group(call):
@@ -664,8 +949,16 @@ def pools_for_asset(call):
     asset = ASSETS[call.data]
     top = get_top5(asset)
     bestYield = top.theBestYield()
+    try:
+        bestYield = top.theBestYield()
+    except Exception as e:
+        print(f"Error in theBestYield for {asset}: {e}")
+        bestYield = []
     if not bestYield:
-        msg = bot.send_message(call.message.chat.id, "No pools found for this asset.")
+        if asset == 'ES':
+            msg = bot.send_message(call.message.chat.id, "No pools for $ES so far. Stay tuned for updates!")
+        else:
+            msg = bot.send_message(call.message.chat.id, "No pools found for this asset.")
         track_user_msg(call.from_user.id, msg.message_id)
         return
     poolsActivity = top.poolsActivity()
@@ -714,6 +1007,35 @@ def pools_for_asset(call):
         msg = bot.send_message(call.message.chat.id, text, reply_markup=markup)
         track_pool_msg(call.from_user.id, msg.message_id)
         track_user_msg(call.from_user.id, msg.message_id)
+    group_id = f"top5_{asset.upper()}"   # Or e.g. f"top5_{asset}"
+    markup = notify_markup(call.from_user.id, group_id)
+    msg = bot.send_message(call.message.chat.id,
+        "Want instant alerts when this top changes? Click the bell ⤵️",
+        reply_markup=markup
+    )
+    track_user_msg(call.from_user.id, msg.message_id)
+    track_pool_msg(call.from_user.id, msg.message_id)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("notify_group:"))
+def subscribe_to_group(call):
+    user_id = call.from_user.id
+    group_id = call.data[len("notify_group:"):]
+    SUBSCRIBERS_PER_GROUP.setdefault(group_id, set()).add(user_id)
+    bot.answer_callback_query(call.id, "You will be notified of changes in this Top list!", show_alert=False)
+    # Update button to show "Unsubscribe"
+    markup = notify_markup(user_id, group_id)
+    bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("unsubscribe_group:"))
+def unsubscribe_from_group(call):
+    user_id = call.from_user.id
+    group_id = call.data[len("unsubscribe_group:"):]
+    SUBSCRIBERS_PER_GROUP.setdefault(group_id, set()).discard(user_id)
+    bot.answer_callback_query(call.id, "You will no longer get notifications from this Top list.", show_alert=False)
+    # Update button to show "Notify me"
+    markup = notify_markup(user_id, group_id)
+    bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=markup)
+
 
 @bot.message_handler(commands=['gsvm','gsvn','tableofcontents','feedback','restart','back'])
 def handle_commands(message):
