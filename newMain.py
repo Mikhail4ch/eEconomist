@@ -115,7 +115,7 @@ def maybe_notify_group(group_id, current_top5):
             for pool, old_pos, new_pos in moved:
                 msg_lines.append(f"  • {pool}: {old_pos} → {new_pos}")
 
-        msg_lines.append("\nCheck the latest Top 5 in the bot! 🏊‍♂️")
+        msg_lines.append("\nCheck the latest Top 5 in the bot 🏊‍♂️")
 
         # Add Remove button
         markup = types.InlineKeyboardMarkup()
