@@ -52,6 +52,8 @@ POINTS = {
 
 SUBSCRIBERS_PER_GROUP = {}  # {group_id: set(user_ids)}
 
+NOTIFICATION_MSG_IDS = {}  # {user_id: [msg_id, ...]}
+
 def pool_key(pool_string):
     # extract just the pool part, without APR
     return pool_string.split(' | ')[0].strip()
@@ -70,10 +72,19 @@ def extract_pool_name(full_key):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("remove_notification:"))
 def remove_notification(call):
+    user_id = call.from_user.id
+    chat_id = call.message.chat.id
+    msg_id = call.message.message_id
     try:
-        bot.delete_message(call.message.chat.id, call.message.message_id)
+        bot.delete_message(chat_id, msg_id)
     except Exception:
         pass
+    # Remove from notifications tracking
+    if user_id in NOTIFICATION_MSG_IDS:
+        try:
+            NOTIFICATION_MSG_IDS[user_id].remove(msg_id)
+        except ValueError:
+            pass
 
 def track_pool_msg(user_id, msg_id):
     POOL_MSG_IDS.setdefault(user_id, []).append(msg_id)
@@ -124,12 +135,13 @@ def maybe_notify_group(group_id, current_top5):
         user_ids = SUBSCRIBERS_PER_GROUP.get(group_id, set())
         for user_id in user_ids:
             try:
-                bot.send_message(
+                msg = bot.send_message(
                     user_id,
                     "\n".join(msg_lines),
                     parse_mode='HTML',
                     reply_markup=markup
-                )
+            )
+                NOTIFICATION_MSG_IDS.setdefault(user_id, []).append(msg.message_id)
             except Exception as e:
                 print(f"Failed to notify {user_id}: {e}")
 
@@ -145,6 +157,16 @@ def get_top5(symbol):
         top.fetch_all()  # if needed
         TOP5_CACHE[symbol] = {'obj': top, 'time': now}
         return top
+    
+def delete_all_notifications(chat_id, user_id):
+    msg_ids = NOTIFICATION_MSG_IDS.get(user_id, [])
+    for msg_id in msg_ids:
+        try:
+            bot.delete_message(chat_id, msg_id)
+        except Exception:
+            pass
+    NOTIFICATION_MSG_IDS[user_id] = []
+
     
 def cache_refresher():
     while True:
@@ -287,8 +309,10 @@ def menu_from_sticky(message):
     user_id = message.from_user.id
     chat_id = message.chat.id
 
-    # 1. Clean up: delete all context messages
+    # 1a. Clean up: delete all context messages
     delete_user_msgs(chat_id, user_id)
+    # 1b. Delete all notifications!
+    delete_all_notifications(chat_id, user_id)
 
     # 2. Optionally delete the sticky button message itself (if you want)
     try:
@@ -1051,7 +1075,7 @@ def unsubscribe_from_group(call):
     bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=markup)
 
 
-@bot.message_handler(commands=['gsvm','gsvn','tableofcontents','feedback','restart','back'])
+@bot.message_handler(commands=['deletenotis','gsvm','gsvn','tableofcontents','feedback','restart','back'])
 def handle_commands(message):
     command = message.text.split()[0].lstrip('/')
     user_id = message.from_user.id
@@ -1064,6 +1088,9 @@ def handle_commands(message):
     elif command == 'gsvn':
         track_user_msg(user_id, message.message_id)
         msg = bot.send_message(chat_id, 'GSVN fam 🌃')
+        track_user_msg(user_id, msg.message_id)
+    elif command == 'deletenotis':
+        delete_all_notifications(chat_id, user_id)
         track_user_msg(user_id, msg.message_id)
     elif command == 'tableofcontents':
         delete_user_msgs(chat_id, user_id)
@@ -1149,6 +1176,16 @@ def handle_unexpected_message(message):
         reply_markup=markup
     )
     track_user_msg(user_id, msg.message_id)
+
+bot.set_my_commands([
+    telebot.types.BotCommand('back', 'Back button'),
+    telebot.types.BotCommand('tableofcontents', 'Table of contents'),
+    telebot.types.BotCommand('deletenotis', 'Delete all notifications'),
+    telebot.types.BotCommand('restart', 'Restart the bot'),
+    telebot.types.BotCommand('gsvm', 'GSVM greeting'),
+    telebot.types.BotCommand('gsvn', 'GSVN greeting'),
+    telebot.types.BotCommand('feedback', 'Send feedback'),
+])
 
 threading.Thread(target=cache_refresher, daemon=True).start()
 bot.polling()
