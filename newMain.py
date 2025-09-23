@@ -6,8 +6,8 @@ from sBitz import sBITZ
 import time
 from threading import Lock
 import threading
+from config import bot
 
-bot = telebot.TeleBot('7968913931:AAFrFTAOgxaiN4MoMOPhHJmk3o5qAnsgYNc')
 
 TOP5_CACHE = {}  # { symbol: { 'obj': TOP5, 'time': timestamp } }
 CACHE_TTL = 120
@@ -55,12 +55,12 @@ POINTS = {
 }
 
 
-SUBSCRIBERS_PER_GROUP = {}  # {group_id: set(user_ids)}
+SUBSCRIBERS_PER_GROUP = {}  
 
-NOTIFICATION_MSG_IDS = {}  # {user_id: [msg_id, ...]}
+NOTIFICATION_MSG_IDS = {}  
 
 def pool_key(pool_string):
-    # extract just the pool part, without APR
+ 
     return pool_string.split(' | ')[0].strip()
 
 def notify_markup(user_id, group_id):
@@ -72,7 +72,7 @@ def notify_markup(user_id, group_id):
     return markup
 
 def extract_pool_name(full_key):
-    # Extracts "PAIR (DEX)" from "PAIR (DEX) | X.XXX％"
+   
     return full_key.split(' | ')[0].strip()
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("remove_notification:"))
@@ -84,7 +84,7 @@ def remove_notification(call):
         bot.delete_message(chat_id, msg_id)
     except Exception:
         pass
-    # Remove from notifications tracking
+   
     if user_id in NOTIFICATION_MSG_IDS:
         try:
             NOTIFICATION_MSG_IDS[user_id].remove(msg_id)
@@ -133,7 +133,7 @@ def maybe_notify_group(group_id, current_top5):
 
         msg_lines.append("\nCheck the latest Top 5 in the bot 🏊‍♂️")
 
-        # Add Remove button
+       
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("❌ Remove", callback_data=f"remove_notification:{group_id}"))
 
@@ -159,7 +159,7 @@ def get_top5(symbol):
         if cache_entry and now - cache_entry['time'] < CACHE_TTL:
             return cache_entry['obj']
         top = TOP5(symbol)
-        top.fetch_all()  # if needed
+        top.fetch_all() 
         TOP5_CACHE[symbol] = {'obj': top, 'time': now}
         return top
     
@@ -258,7 +258,7 @@ def menu_entry_point(call):
     user_id = call.from_user.id
     chat_id = call.message.chat.id
 
-    # Clean up previous sticky/menu (from sticky button)
+    # Clean up previous sticky/menu 
     if STICKY_MSG_ID.get(user_id):
         try: bot.delete_message(chat_id, STICKY_MSG_ID[user_id])
         except: pass
@@ -508,7 +508,7 @@ def handle_juciestpools(call):
             msg = bot.send_message(call.message.chat.id, text, reply_markup=markup)
             track_pool_msg(call.from_user.id, msg.message_id)
             track_user_msg(call.from_user.id, msg.message_id)
-        group_id = "top5_overall"  # Or e.g. f"top5_{asset}"
+        group_id = "top5_overall"  
         markup = notify_markup(call.from_user.id, group_id)
         msg = bot.send_message(call.message.chat.id,
             "Want instant alerts when this top changes? Click the bell ⤵️",
